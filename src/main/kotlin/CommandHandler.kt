@@ -2,10 +2,13 @@ package com.bcz
 
 import net.mamoe.mirai.event.events.GroupMessageEvent
 import net.mamoe.mirai.message.data.content
-
+import com.bcz.Config
 object CommandHandler {
     private val bindings = mutableMapOf<Long, Pair<Long, String>>()
     // QQ -> (GroupId, SteamId)
+
+
+
 
     suspend fun handle(event: GroupMessageEvent) {
         val msg = event.message.content.trim()
@@ -34,4 +37,9 @@ object CommandHandler {
     }
 
     fun getBindings(): Map<Long, Pair<Long, String>> = bindings.toMap()
+
+
+
+
 }
+

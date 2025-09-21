@@ -8,10 +8,10 @@ import okhttp3.Request
 object SteamApi {
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
-    private const val API_KEY = "C000C1C92E46E9BCC538DA4A9E54CFA5"
 
     fun getPlayerSummary(steamId: String): PlayerSummary? {
-        val url = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=$API_KEY&steamids=$steamId"
+        val apiKey = Config.apiKey.takeIf { it.isNotBlank() } ?: return null
+        val url = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=$apiKey&steamids=$steamId"
         val request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return null
@@ -22,7 +22,8 @@ object SteamApi {
     }
 
     fun getPlayerAchievements(steamId: String, appId: String): List<Achievement>? {
-        val url = "https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=$API_KEY&steamid=$steamId&appid=$appId"
+        val apiKey = Config.apiKey.takeIf { it.isNotBlank() } ?: return null
+        val url = "https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=$apiKey&steamid=$steamId&appid=$appId"
         val request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return null

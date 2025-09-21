@@ -19,9 +19,23 @@ object ImageRenderer {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
 
-        g.color = Color(24, 26, 33)
-        g.fillRoundRect(0, 0, width, height, 20, 20)
+        // === 加载背景 ===
+        val bgStream = javaClass.getResourceAsStream("/background.png")
+        if (bgStream != null) {
+            try {
+                val bgImage = ImageIO.read(bgStream)
+                val scaledBg = bgImage.getScaledInstance(width, height, Image.SCALE_SMOOTH)
+                g.drawImage(scaledBg, 0, 0, null)
+            } catch (e: Exception) {
+                g.color = Color(24, 26, 33)
+                g.fillRoundRect(0, 0, width, height, 20, 20)
+            }
+        } else {
+            g.color = Color(24, 26, 33)
+            g.fillRoundRect(0, 0, width, height, 20, 20)
+        }
 
+        // === 头像 ===
         try {
             val avatar = ImageIO.read(URL(summary.avatarfull))
             val avatarScaled = avatar.getScaledInstance(64, 64, Image.SCALE_SMOOTH)
@@ -38,10 +52,12 @@ object ImageRenderer {
             g.drawImage(mask, avatarX, avatarY, null)
         } catch (_: Exception) {}
 
+        // === 玩家名称 ===
         g.color = Color.WHITE
         g.font = Font("Microsoft YaHei", Font.BOLD, 16)
         g.drawString(summary.personaname, 100, 35)
 
+        // === 在线/离线/游戏中 ===
         g.font = Font("Microsoft YaHei", Font.PLAIN, 14)
         if (summary.gameextrainfo != null) {
             g.color = Color(135, 206, 250)
@@ -51,6 +67,7 @@ object ImageRenderer {
             g.drawString(if (summary.personastate == 1) "在线" else "离线", 100, 60)
         }
 
+        // === 成就信息 ===
         if (achievement != null) {
             try {
                 val icon = ImageIO.read(URL(achievement.iconUrl))
@@ -67,12 +84,14 @@ object ImageRenderer {
             g.drawString(achievement.description ?: "", 160, 115)
         }
 
+        // === 边框 ===
         g.color = Color(0, 174, 239)
         g.stroke = BasicStroke(2f)
         g.drawRoundRect(1, 1, width - 2, height - 2, 20, 20)
 
         g.dispose()
 
+        // 输出 PNG
         val output = ByteArrayOutputStream()
         ImageIO.write(image, "png", output)
         return output.toByteArray()
