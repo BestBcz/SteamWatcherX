@@ -1,0 +1,150 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Generate Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Extract version from Gradle
+        id: version
+        run: |
+          VERSION=$(grep -E '^version\s*=' build.gradle.kts | head -n1 | sed -E 's/.*"(.+)"$/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if release commit
+        id: check_release
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "Last commit message: $COMMIT_MSG"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          elif echo "$COMMIT_MSG" | grep -qE '\bv[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stop if not release
+        if: steps.check_release.outputs.should_release == 'false'
+        run: echo "Not a release commit, skipping job."
+
+      - name: Build project
+        if: steps.check_release.outputs.should_release == 'true'
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean buildPlugin
+
+      - name: Ensure tag exists (auto create if missing)
+        if: steps.check_release.outputs.should_release == 'true'
+        run: |
+          git fetch --tags
+          CURRENT_TAG="v${{ env.VERSION }}"
+          if ! git tag | grep -q "^$CURRENT_TAG$"; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag "$CURRENT_TAG"
+            git push origin "$CURRENT_TAG"
+          fi
+
+      - name: Generate Changelog
+        if: steps.check_release.outputs.should_release == 'true'
+        id: changelog
+        run: |
+          echo "## 🎨 Changelog" > release_notes.md
+          echo "" >> release_notes.md
+
+          git fetch --tags
+
+          CURRENT_TAG="v${{ env.VERSION }}"
+          ALL_TAGS=($(git tag --list "v*" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | sort -V))
+
+          CUR_INDEX=-1
+          for ((i=0; i<${#ALL_TAGS[@]}; i++)); do
+            if [[ "${ALL_TAGS[$i]}" == "$CURRENT_TAG" ]]; then
+              CUR_INDEX=$i
+              break
+            fi
+          done
+
+          if [[ $CUR_INDEX -eq -1 ]]; then
+            echo "Current tag $CURRENT_TAG not found in tag list: ${ALL_TAGS[*]}"
+            exit 1
+          fi
+
+          if [[ $CUR_INDEX -eq 0 ]]; then
+            RANGE=""
+            echo "No previous tag found, using all commits up to $CURRENT_TAG"
+          else
+            PREV_TAG="${ALL_TAGS[$((CUR_INDEX-1))]}"
+            RANGE="$PREV_TAG..$CURRENT_TAG"
+            echo "Previous tag: $PREV_TAG"
+          fi
+
+          COMMITS=$(git log --pretty=format:"%s (%an)" $RANGE | grep -v 'dependabot')
+
+          NEW=""
+          FIXED=""
+          REFACTOR=""
+          DOCS=""
+          IMPROVED=""
+          OTHER=""
+
+          while IFS= read -r line; do
+            if [[ "$line" == feat:* ]]; then
+              NEW+=$'- '"${line#feat: }"$'\n'
+            elif [[ "$line" == fix:* ]]; then
+              FIXED+=$'- '"${line#fix: }"$'\n'
+            elif [[ "$line" == refactor:* ]]; then
+              REFACTOR+=$'- '"${line#refactor: }"$'\n'
+            elif [[ "$line" == docs:* ]]; then
+              DOCS+=$'- '"${line#docs: }"$'\n'
+            elif [[ "$line" == style:* || "$line" == perf:* ]]; then
+              IMPROVED+=$'- '"${line#*: }"$'\n'
+            else
+              OTHER+=$'- '"${line}"$'\n'
+            fi
+          done <<< "$COMMITS"
+
+          [[ -n "$NEW" ]] && echo -e "### ✅ New\n$NEW" >> release_notes.md
+          [[ -n "$FIXED" ]] && echo -e "### 🛠 Fixed\n$FIXED" >> release_notes.md
+          [[ -n "$REFACTOR" ]] && echo -e "### 🧽 Refactor\n$REFACTOR" >> release_notes.md
+          [[ -n "$DOCS" ]] && echo -e "### 📚 Documentation\n$DOCS" >> release_notes.md
+          [[ -n "$IMPROVED" ]] && echo -e "### 🚀 Improved\n$IMPROVED" >> release_notes.md
+          [[ -n "$OTHER" ]] && echo -e "### 🔄 Other Changes\n$OTHER" >> release_notes.md
+
+          cat release_notes.md
+
+      - name: Create GitHub Release
+        if: steps.check_release.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: "v${{ env.VERSION }} Release"
+          body_path: release_notes.md
+          files: build/mirai/*.mirai2.jar
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
