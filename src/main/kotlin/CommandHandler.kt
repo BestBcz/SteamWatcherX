@@ -17,15 +17,20 @@ object CommandHandler {
             msg.startsWith("/bind ") -> {
                 val steamId = msg.removePrefix("/bind ").trim()
                 if (steamId.isNotEmpty()) {
-                    val groupBindings = Subscribers.bindings.getOrPut(groupId) { mutableMapOf() }
-                    groupBindings[sender] = steamId
-                    SteamWatcherX.savePluginData(Subscribers)
+                    // 检查是否已存在相同的绑定
+                    val existing = Subscribers.bindings.any { it.groupId == groupId && it.qqId == sender && it.steamId == steamId }
+                    if (!existing) {
+                        Subscribers.bindings.add(Subscribers.Subscription(groupId, sender, steamId))
+                        SteamWatcherX.savePluginData(Subscribers)
 
-                    event.group.sendMessage("✅ 绑定成功！QQ: $sender → 群: $groupId → SteamID: $steamId")
+                        event.group.sendMessage("✅ 绑定成功！QQ: $sender → 群: $groupId → SteamID: $steamId")
 
-                    // ✅ 立即初始化监控
-                    SteamWatcherX.scope.launch {
-                        SteamWatcherX.checkUpdatesOnce(groupId, sender, steamId)
+                        // ✅ 立即初始化监控
+                        SteamWatcherX.scope.launch {
+                            SteamWatcherX.checkUpdatesOnce(groupId, sender, steamId)
+                        }
+                    } else {
+                        event.group.sendMessage("⚠️ 此 SteamID 已绑定，无需重复绑定")
                     }
                 } else {
                     event.group.sendMessage("❌ 绑定失败，SteamID 不能为空")
@@ -33,25 +38,30 @@ object CommandHandler {
             }
 
             // === 解绑 ===
-            msg.startsWith("/unbind") -> {
-                val removed = Subscribers.bindings[groupId]?.remove(sender)
+            msg.startsWith("/unbind ") -> {
+                val steamId = msg.removePrefix("/unbind ").trim()
+                val removed = if (steamId.isNotEmpty()) {
+                    Subscribers.bindings.removeIf { it.groupId == groupId && it.qqId == sender && it.steamId == steamId }
+                } else {
+                    Subscribers.bindings.removeIf { it.groupId == groupId && it.qqId == sender }
+                }
                 SteamWatcherX.savePluginData(Subscribers)
 
-                if (removed != null) {
-                    event.group.sendMessage("✅ 已解除绑定 (SteamID=$removed)")
+                if (removed) {
+                    event.group.sendMessage("✅ 已解除绑定${if (steamId.isNotEmpty()) " (SteamID=$steamId)" else ""}")
                 } else {
-                    event.group.sendMessage("⚠️ 你还没有绑定 SteamID")
+                    event.group.sendMessage("⚠️ 未找到对应的绑定")
                 }
             }
 
             // === 查看已绑定列表 ===
             msg.startsWith("/list") -> {
-                val groupBindings = Subscribers.bindings[groupId]
-                if (groupBindings.isNullOrEmpty()) {
+                val groupBindings = Subscribers.bindings.filter { it.groupId == groupId }
+                if (groupBindings.isEmpty()) {
                     event.group.sendMessage("📭 本群暂无绑定")
                 } else {
-                    val listStr = groupBindings.entries.joinToString("\n") { (qq, steam) ->
-                        "QQ: $qq → SteamID: $steam"
+                    val listStr = groupBindings.joinToString("\n") { sub ->
+                        "QQ: ${sub.qqId} → SteamID: ${sub.steamId}"
                     }
                     event.group.sendMessage("📌 本群已绑定:\n$listStr")
                 }

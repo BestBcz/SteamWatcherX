@@ -69,13 +69,11 @@ object SteamWatcherX : KotlinPlugin(
             return
         }
 
-        val total = Subscribers.bindings.values.sumOf { it.size }
+        val total = Subscribers.bindings.size
         logger.info("开始检查 $total 个绑定的 Steam 状态...")
 
-        for ((groupId, groupBindings) in Subscribers.bindings) {
-            for ((qq, steamId) in groupBindings) {
-                checkUser(groupId, qq, steamId)
-            }
+        for (subscription in Subscribers.bindings) {
+            checkUser(subscription.groupId, subscription.qqId, subscription.steamId)
         }
     }
 
