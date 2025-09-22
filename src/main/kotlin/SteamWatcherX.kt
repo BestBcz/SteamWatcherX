@@ -1,18 +1,21 @@
 package com.bcz
 
+import kotlinx.coroutines.*
+import net.mamoe.mirai.Bot
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
 import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
 import net.mamoe.mirai.event.GlobalEventChannel
 import net.mamoe.mirai.event.events.GroupMessageEvent
-import kotlinx.coroutines.*
-import net.mamoe.mirai.Bot
 import net.mamoe.mirai.utils.ExternalResource.Companion.toExternalResource
+import net.mamoe.mirai.message.data.Image
+import net.mamoe.mirai.message.data.MessageChainBuilder
+
 
 object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "0.0.2",
+        version = "0.0.3",
     ) {
 
         author("BCZ")
@@ -20,23 +23,30 @@ object SteamWatcherX : KotlinPlugin(
     }
 ) {
 
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    internal val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private data class State(val personastate: Int, val gameid: String?)
+    internal data class UserState(
+        var personastate: Int,
+        var gameid: String?,
+        var lastGameId: String? = null,
+        var lastUnlockTime: Long = 0L
+    )
 
-    // steamId -> last known state
-    private val lastStates = mutableMapOf<String, State>()
+    private val lastStates = mutableMapOf<String, UserState>()
 
     override fun onEnable() {
         Config.reload()
-        logger.info("✅ SteamWatcherX 插件已启用 (API Key: ${Config.apiKey.ifBlank { "未设置" }})")
+        Subscribers.reload()
 
-        // 监听群消息（用于绑定/解绑命令）
+        if (Config.apiKey.isBlank()) {
+            logger.warning("⚠️ Steam API Key 未设置，插件无法正常工作！")
+        }
+        logger.info("✅ SteamWatcherX 插件已启用 (API Key: ${Config.apiKey.ifBlank { "未设置" }}, Interval: ${Config.interval / 1000}s)")
+
         GlobalEventChannel.subscribeAlways<GroupMessageEvent> {
             scope.launch { CommandHandler.handle(this@subscribeAlways) }
         }
 
-        // 定时任务：每隔 60 秒检查一次（测试时可改小）
         scope.launch {
             while (isActive) {
                 try {
@@ -46,79 +56,140 @@ object SteamWatcherX : KotlinPlugin(
                 } catch (e: Exception) {
                     logger.warning("检查更新主循环出错: ${e.message}")
                 }
-                delay(60_000L) // 正式使用 60000 ms；测试可以改成 10000
+                delay(Config.interval)
             }
         }
     }
 
+
+    //检查状态
     private suspend fun checkUpdates() {
-        val bindings = CommandHandler.getBindings()
-        if (bindings.isEmpty()) {
+        if (Subscribers.bindings.isEmpty()) {
             logger.info("当前没有任何绑定，跳过检查。")
             return
         }
 
-        logger.info("开始检查 ${bindings.size} 个绑定的 Steam 状态...")
-        for ((qq, pair) in bindings) {
-            val (groupId, steamId) = pair
-            try {
-                val summary = SteamApi.getPlayerSummary(steamId)
-                if (summary == null) {
-                    logger.warning("SteamApi 返回 null：steamId=$steamId (qq=$qq)")
-                    continue
-                }
+        val total = Subscribers.bindings.values.sumOf { it.size }
+        logger.info("开始检查 $total 个绑定的 Steam 状态...")
 
-                val newState = State(summary.personastate, summary.gameid)
-                val lastState = lastStates[steamId]
-
-                if (lastState == null) {
-                    // 第一次见到这个 steamId，仅记录状态，不发送通知（避免绑定时立刻触发）
-                    lastStates[steamId] = newState
-                    logger.info("记录初始状态：steamId=$steamId -> $newState (qq=$qq, 群=$groupId)，不发送通知")
-                    continue
-                }
-
-                if (lastState != newState) {
-                    // 状态发生变化（包括在线状态或正在玩的 gameid 变化）
-                    logger.info("状态变化：steamId=$steamId (qq=$qq) 从 $lastState -> $newState，准备发送通知 到 群 $groupId")
-                    lastStates[steamId] = newState
-                    sendUpdate(qq, groupId, summary)
-                } else {
-                    logger.info("状态未变：steamId=$steamId -> $newState (qq=$qq)，不发送")
-                }
-            } catch (e: Exception) {
-                logger.warning("获取 Steam 状态失败: steamId=$steamId → ${e.message}")
+        for ((groupId, groupBindings) in Subscribers.bindings) {
+            for ((qq, steamId) in groupBindings) {
+                checkUser(groupId, qq, steamId)
             }
         }
     }
 
-    private suspend fun sendUpdate(qq: Long, groupId: Long, summary: SteamApi.PlayerSummary) {
+    //检查单个绑定
+
+    suspend fun checkUpdatesOnce(groupId: Long, qq: Long, steamId: String) {
+        logger.info("手动初始化检查：steamId=$steamId (qq=$qq, 群=$groupId)")
+        checkUser(groupId, qq, steamId, forceNotify = true)
+    }
+
+    //checkUser
+    private suspend fun checkUser(groupId: Long, qq: Long, steamId: String, forceNotify: Boolean = false) {
         try {
-            val imageBytes = ImageRenderer.render(summary)
+            val summary = SteamApi.getPlayerSummary(steamId) ?: return
+            val newState = UserState(summary.personastate, summary.gameid)
+            var currentState = lastStates[steamId]
 
-            val bot = Bot.instances.firstOrNull()
-            if (bot == null) {
-                logger.warning("没有可用的 Bot 实例，无法发送消息 (qq=$qq, group=$groupId)")
+            if (currentState == null) {
+                currentState = newState
+                lastStates[steamId] = currentState
+
+                if (forceNotify) {
+                    // /bind 后第一次就推送
+                    sendUpdate(qq, groupId, summary)
+                } else {
+                    logger.info("记录初始状态：steamId=$steamId (qq=$qq, 群=$groupId)，不发送通知")
+                }
+
+                if (summary.gameid != null) {
+                    val achievements = SteamApi.getPlayerAchievements(steamId, summary.gameid)
+                    if (achievements != null) {
+                        currentState.lastGameId = summary.gameid
+                        currentState.lastUnlockTime = achievements.filter { it.achieved == 1 }
+                            .maxOfOrNull { it.unlocktime } ?: 0L
+                    }
+                }
                 return
             }
 
-            val group = bot.getGroup(groupId)
-            if (group == null) {
-                logger.warning("找不到群 $groupId，无法发送消息 (qq=$qq)")
-                return
+            if (newState.personastate != currentState.personastate || newState.gameid != currentState.gameid) {
+                logger.info("状态变化：steamId=$steamId (qq=$qq) -> 发送通知")
+                currentState.personastate = newState.personastate
+                currentState.gameid = newState.gameid
+                sendUpdate(qq, groupId, summary)
             }
 
-            // 上传图片并发送
+            if (summary.gameid != null) {
+                val appId = summary.gameid
+                if (appId != currentState.lastGameId) {
+                    logger.info("游戏变化：steamId=$steamId -> 重置成就跟踪")
+                    currentState.lastGameId = appId
+                    val achievements = SteamApi.getPlayerAchievements(steamId, appId)
+                    if (achievements != null) {
+                        currentState.lastUnlockTime = achievements.filter { it.achieved == 1 }
+                            .maxOfOrNull { it.unlocktime } ?: 0L
+                    }
+                    return
+                }
+
+                val achievements = SteamApi.getPlayerAchievements(steamId, appId) ?: return
+                val newAchievements =
+                    achievements.filter { it.achieved == 1 && it.unlocktime > currentState.lastUnlockTime }
+                if (newAchievements.isNotEmpty()) {
+                    logger.info("检测到新成就：steamId=$steamId (qq=$qq)，数量=${newAchievements.size}")
+                    val schema = SteamApi.getSchemaForGame(appId) ?: return
+                    val sortedNew = newAchievements.sortedBy { it.unlocktime }
+                    for (ach in sortedNew) {
+                        val schemaAch =
+                            schema.game.availableGameStats.achievements.find { it.name == ach.apiname }
+                        if (schemaAch != null) {
+                            val info = ImageRenderer.AchievementInfo(
+                                schemaAch.displayName,
+                                schemaAch.description,
+                                schemaAch.icon
+                            )
+                            sendUpdate(qq, groupId, summary, info)
+                        }
+                    }
+                    currentState.lastUnlockTime = sortedNew.maxOf { it.unlocktime }
+                }
+            } else {
+                currentState.lastGameId = null
+                currentState.lastUnlockTime = 0L
+            }
+        } catch (e: Exception) {
+            logger.warning("获取 Steam 状态失败: steamId=$steamId → ${e.message}")
+        }
+    }
+
+
+    private suspend fun sendUpdate(qq: Long, groupId: Long, summary: SteamApi.PlayerSummary, achievement: ImageRenderer.AchievementInfo? = null) {
+        try {
+            val imageBytes = ImageRenderer.render(summary, achievement)
+            val bot = Bot.instances.firstOrNull() ?: return
+            val group = bot.getGroup(groupId) ?: return
+
+            val text = when {
+                achievement != null -> "${summary.personaname} 解锁了成就 ${achievement.name}"
+                summary.gameextrainfo != null -> "${summary.personaname} 正在玩 ${summary.gameextrainfo}"
+                summary.personastate == 1 -> "${summary.personaname} 在线"
+                else -> "${summary.personaname} 目前离线"
+            }
+
             val resource = imageBytes.toExternalResource()
             try {
-                val img = group.uploadImage(resource)
-                group.sendMessage(img)
-                logger.info("已发送 Steam 状态图到群 $groupId (qq=$qq, steam=${summary.steamid})")
+                val img: Image = group.uploadImage(resource)
+                val chain = MessageChainBuilder()
+                    .append(text)
+                    .append("\n")
+                    .append(img)
+                    .build()
+                group.sendMessage(chain)
             } finally {
-                // 释放 ExternalResource
-                try {
-                    resource.close()
-                } catch (_: Exception) {}
+                withContext(Dispatchers.IO) { resource.close() }
             }
         } catch (e: Exception) {
             logger.warning("发送更新失败 (qq=$qq, group=$groupId, steam=${summary.steamid}) -> ${e.message}")
@@ -127,6 +198,7 @@ object SteamWatcherX : KotlinPlugin(
 
     override fun onDisable() {
         scope.cancel()
+        Subscribers.save()
         logger.info("SteamWatcherX 已关闭")
     }
 }

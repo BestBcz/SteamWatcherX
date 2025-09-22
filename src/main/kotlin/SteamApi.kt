@@ -33,6 +33,17 @@ object SteamApi {
         }
     }
 
+    fun getSchemaForGame(appId: String): GameSchema? {
+        val apiKey = Config.apiKey.takeIf { it.isNotBlank() } ?: return null
+        val url = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$apiKey&appid=$appId"
+        val request = Request.Builder().url(url).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val body = response.body?.string() ?: return null
+            return json.decodeFromString<GameSchema>(body)
+        }
+    }
+
     @Serializable
     data class PlayerResponse(val response: PlayerList)
 
@@ -45,7 +56,7 @@ object SteamApi {
         val personaname: String,
         val profileurl: String,
         val avatarfull: String,
-        val personastate: Int, // 0=离线 1=在线
+        val personastate: Int,
         val gameextrainfo: String? = null,
         val gameid: String? = null
     )
@@ -61,5 +72,23 @@ object SteamApi {
         val apiname: String,
         val achieved: Int,
         val unlocktime: Long
+    )
+
+    @Serializable
+    data class GameSchema(val game: GameInfo)
+
+    @Serializable
+    data class GameInfo(val gameName: String, val gameVersion: String, val availableGameStats: AvailableGameStats)
+
+    @Serializable
+    data class AvailableGameStats(val achievements: List<SchemaAchievement>)
+
+    @Serializable
+    data class SchemaAchievement(
+        val name: String,
+        val displayName: String,
+        val description: String?,
+        val icon: String,
+        val icongray: String
     )
 }

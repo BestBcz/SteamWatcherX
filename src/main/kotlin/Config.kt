@@ -7,4 +7,7 @@ import net.mamoe.mirai.console.data.value
 object Config : AutoSavePluginConfig("SteamWatcherXConfig") {
     @ValueDescription("Steam API Key")
     val apiKey: String by value("")
+
+    @ValueDescription("状态检查间隔 (毫秒), 修改后需重载插件")
+    val interval: Long by value(60000L)
 }

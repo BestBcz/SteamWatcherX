@@ -19,7 +19,7 @@ object ImageRenderer {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
 
-        // === 加载背景 ===
+        // === 背景 ===
         val bgStream = javaClass.getResourceAsStream("/background.png")
         if (bgStream != null) {
             try {
@@ -84,8 +84,14 @@ object ImageRenderer {
             g.drawString(achievement.description ?: "", 160, 115)
         }
 
-        // === 边框 ===
-        g.color = Color(0, 174, 239)
+        // === 边框颜色 ===
+        val borderColor = when {
+            achievement != null -> Color(0, 200, 0) // 成就 = 绿色
+            summary.gameextrainfo != null -> Color(0, 200, 0) // 游戏中 = 绿色
+            summary.personastate == 1 -> Color(0, 174, 239)   // 在线 = 蓝色
+            else -> Color(128, 128, 128)                     // 离线 = 灰色
+        }
+        g.color = borderColor
         g.stroke = BasicStroke(2f)
         g.drawRoundRect(1, 1, width - 2, height - 2, 20, 20)
 
