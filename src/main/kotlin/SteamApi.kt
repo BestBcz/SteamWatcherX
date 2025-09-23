@@ -65,7 +65,7 @@ object SteamApi {
     data class AchievementResponse(val playerstats: PlayerStats)
 
     @Serializable
-    data class PlayerStats(val achievements: List<Achievement>)
+    data class PlayerStats(val achievements: List<Achievement> = emptyList())
 
     @Serializable
     data class Achievement(

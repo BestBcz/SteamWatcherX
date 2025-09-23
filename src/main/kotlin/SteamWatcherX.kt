@@ -15,7 +15,7 @@ object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "0.0.3",
+        version = "1.0.0",
     ) {
 
         author("BCZ")
@@ -166,16 +166,18 @@ object SteamWatcherX : KotlinPlugin(
 
     private suspend fun sendUpdate(qq: Long, groupId: Long, summary: SteamApi.PlayerSummary, achievement: ImageRenderer.AchievementInfo? = null) {
         try {
+            val text = when {
+                achievement != null && Config.notifyAchievement -> "${summary.personaname} 解锁了成就 ${achievement.name}"
+                summary.gameextrainfo != null && Config.notifyGame -> "${summary.personaname} 正在玩 ${summary.gameextrainfo}"
+                summary.personastate == 1 && Config.notifyOnline -> "${summary.personaname} 在线"
+                summary.personastate != 1 && Config.notifyOnline -> "${summary.personaname} 目前离线"
+                else -> null
+            }
+            if (text == null) return
+
             val imageBytes = ImageRenderer.render(summary, achievement)
             val bot = Bot.instances.firstOrNull() ?: return
             val group = bot.getGroup(groupId) ?: return
-
-            val text = when {
-                achievement != null -> "${summary.personaname} 解锁了成就 ${achievement.name}"
-                summary.gameextrainfo != null -> "${summary.personaname} 正在玩 ${summary.gameextrainfo}"
-                summary.personastate == 1 -> "${summary.personaname} 在线"
-                else -> "${summary.personaname} 目前离线"
-            }
 
             val resource = imageBytes.toExternalResource()
             try {

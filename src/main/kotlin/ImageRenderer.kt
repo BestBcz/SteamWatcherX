@@ -10,7 +10,7 @@ import javax.imageio.ImageIO
 object ImageRenderer {
 
     fun render(summary: SteamApi.PlayerSummary, achievement: AchievementInfo? = null): ByteArray {
-        val width = 400
+        val width = 290
         val height = if (achievement != null) 150 else 100
 
         val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
@@ -86,8 +86,8 @@ object ImageRenderer {
 
         // === 边框颜色 ===
         val borderColor = when {
-            achievement != null -> Color(0, 200, 0) // 成就 = 绿色
-            summary.gameextrainfo != null -> Color(0, 200, 0) // 游戏中 = 绿色
+            achievement != null -> Color(144, 238, 144) // 成就 = 绿色
+            summary.gameextrainfo != null -> Color(144, 238, 144) // 游戏中 = 绿色
             summary.personastate == 1 -> Color(0, 174, 239)   // 在线 = 蓝色
             else -> Color(128, 128, 128)                     // 离线 = 灰色
         }
