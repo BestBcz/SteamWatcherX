@@ -35,13 +35,15 @@
 
 ## 配置（Config）
 
- Steam API Key
+- Steam API Key
 apiKey: 
- 状态检查间隔 (毫秒), 修改后需重载插件
+- 状态检查间隔 (毫秒), 修改后需重载插件
 interval: 60000
- 是否开启在线状态通知
+- 是否开启在线状态通知
 notifyOnline: false
- 是否开启游戏状态通知
+- 是否开启游戏状态通知
 notifyGame: true
- 是否开启成就解锁通知
+- 是否开启成就解锁通知
 notifyAchievement: true
+
+## 插件图片
