@@ -47,3 +47,6 @@ notifyGame: true
 notifyAchievement: true
 
 ## 插件图片
+
+<img width="396" height="564" alt="image" src="https://github.com/user-attachments/assets/7be37c47-d456-46a4-9051-d3ea8fbe1a60" />
+
