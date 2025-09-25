@@ -35,22 +35,25 @@ object ImageRenderer {
             g.fillRoundRect(0, 0, width, height, 20, 20)
         }
 
-        // === 头像 ===
-        try {
-            val avatar = ImageIO.read(URL(summary.avatarfull))
-            val avatarScaled = avatar.getScaledInstance(64, 64, Image.SCALE_SMOOTH)
-            val avatarX = 20
-            val avatarY = (height - 64) / 2
-            val mask = BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB)
-            val g2 = mask.createGraphics()
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-            g2.composite = AlphaComposite.Src
-            g2.fill(RoundRectangle2D.Float(0f, 0f, 64f, 64f, 16f, 16f))
-            g2.composite = AlphaComposite.SrcIn
-            g2.drawImage(avatarScaled, 0, 0, null)
-            g2.dispose()
-            g.drawImage(mask, avatarX, avatarY, null)
-        } catch (_: Exception) {}
+        // === 头像 (using cache) ===
+        AvatarCache.getAvatarImage(summary.avatarfull)?.let { avatar ->
+            try {
+                val avatarScaled = avatar.getScaledInstance(64, 64, Image.SCALE_SMOOTH)
+                val avatarX = 20
+                val avatarY = (height - 64) / 2
+                val mask = BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB)
+                val g2 = mask.createGraphics()
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.composite = AlphaComposite.Src
+                g2.fill(RoundRectangle2D.Float(0f, 0f, 64f, 64f, 16f, 16f))
+                g2.composite = AlphaComposite.SrcIn
+                g2.drawImage(avatarScaled, 0, 0, null)
+                g2.dispose()
+                g.drawImage(mask, avatarX, avatarY, null)
+            } catch (e: Exception) {
+                SteamWatcherX.logger.warning("An error occurred while drawing the avatar: ${e.message}")
+            }
+        }
 
         // === 玩家名称 ===
         g.color = Color.WHITE
