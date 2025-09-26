@@ -15,7 +15,7 @@ object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "1.1.0",
+        version = "1.1.1",
     ) {
 
         author("BCZ")
