@@ -50,5 +50,6 @@ notifyAchievement: true
 
 ## 插件图片
 
-<img width="396" height="564" alt="image" src="https://github.com/user-attachments/assets/7be37c47-d456-46a4-9051-d3ea8fbe1a60" />
+<img width="451" height="528" alt="image" src="https://github.com/user-attachments/assets/72e8ed23-cf4e-4449-8b57-e7c8542783ed" />
+
 
