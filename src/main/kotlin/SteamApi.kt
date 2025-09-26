@@ -54,20 +54,64 @@ object SteamApi {
     }
 
 
-    // --- 数据类 ---
-    @Serializable data class PlayerResponse(val response: PlayerList)
-    @Serializable data class PlayerList(val players: List<PlayerSummary>)
-    @Serializable data class PlayerSummary(val steamid: String, val personaname: String, val profileurl: String, val avatarfull: String, val personastate: Int, val gameextrainfo: String? = null, val gameid: String? = null)
-    @Serializable data class AchievementResponse(val playerstats: PlayerStats)
-    @Serializable data class PlayerStats(val achievements: List<Achievement> = emptyList())
-    @Serializable data class Achievement(val apiname: String, val achieved: Int, val unlocktime: Long)
-    @Serializable data class GameSchema(val game: GameInfo)
-    @Serializable data class GameInfo(val availableGameStats: AvailableGameStats)
-    @Serializable data class AvailableGameStats(val achievements: List<SchemaAchievement>)
-    @Serializable data class SchemaAchievement(val name: String, val displayName: String, val description: String?, val icon: String)
+    // 数据类
+    @Serializable data class
+    PlayerResponse(
+        val response: PlayerList
+    )
+    @Serializable data class
+    PlayerList(
+        val players: List<PlayerSummary>
+    )
+    @Serializable data class
+    PlayerSummary(
+        val steamid: String,
+        val personaname: String,
+        val profileurl: String,
+        val avatarfull: String,
+        val personastate: Int,
+        val gameextrainfo: String? = null,
+        val gameid: String? = null
+    )
+    @Serializable data class
+    AchievementResponse(val playerstats: PlayerStats)
+    @Serializable data class
+    PlayerStats(
+        val achievements: List<Achievement> = emptyList()
+    )
+    @Serializable data class
+    Achievement(
+        val apiname: String, val achieved: Int, val unlocktime: Long
+    )
+    @Serializable data class
+    GameSchema(
+        val game: GameInfo
+    )
+    @Serializable data class
+    GameInfo(
+        val availableGameStats: AvailableGameStats
+    )
+    @Serializable data class
+    AvailableGameStats(
+        val achievements: List<SchemaAchievement>
+    )
+    @Serializable data class
+    SchemaAchievement(
+        val name: String,
+        val displayName: String,
+        val description: String? = null,
+        val icon: String)
 
     // 全局成就
-    @Serializable data class GlobalAchievementResponse(val achievementpercentages: GlobalAchievementList)
-    @Serializable data class GlobalAchievementList(val achievements: List<GlobalAchievement>)
-    @Serializable data class GlobalAchievement(val name: String, val percent: Double)
+    @Serializable data class
+    GlobalAchievementResponse(
+        val achievementpercentages: GlobalAchievementList)
+    @Serializable data class
+    GlobalAchievementList(
+        val achievements: List<GlobalAchievement>
+    )
+    @Serializable data class
+    GlobalAchievement(
+        val name: String, val percent: Double
+    )
 }
