@@ -2,7 +2,7 @@
 # SteamWatcherX
 
 视奸你的群友-SteamWatcherX 是一个 mirai 插件，可以订阅群友的Steam状态并将状态变更发送到指定qq群聊
-
+_仓库正在积极维护更新中，喜欢的话可以点个免费的star支持我_
 ---
 
 ## 功能（Features）
