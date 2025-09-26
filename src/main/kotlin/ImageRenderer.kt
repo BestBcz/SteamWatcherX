@@ -17,16 +17,16 @@ object ImageRenderer {
     private val FONT_YAHEI_PLAIN_10 = Font("Microsoft YaHei", Font.PLAIN, 10)
 
     // 玩家状态颜色常量
-    private val NAME_COLOR_OFFLINE = Color(200, 200, 200)
-    private val STATUS_TEXT_OFFLINE = Color(130, 130, 130)
-    private val STATUS_LINE_OFFLINE = Color(130, 130, 130)
-    private val NAME_COLOR_ONLINE = Color(220, 230, 255)
-    private val STATUS_TEXT_ONLINE = Color(125, 182, 229)
-    private val STATUS_LINE_ONLINE = Color(125, 182, 229)
-    private val NAME_COLOR_INGAME = Color(184, 255, 11)
-    private val STATUS_TEXT_INGAME = Color(130, 130, 130)
-    private val GAME_NAME_COLOR_INGAME = Color(144, 238, 144)
-    private val STATUS_LINE_INGAME = Color(144, 238, 144)
+    private val NAME_COLOR_OFFLINE = Color(157, 157, 157)
+    private val STATUS_TEXT_OFFLINE = Color(80, 80, 80)
+    private val STATUS_LINE_OFFLINE = Color(80, 80, 80)
+    private val NAME_COLOR_ONLINE = Color(103,195,231)
+    private val STATUS_TEXT_ONLINE = Color(72,135,159)
+    private val STATUS_LINE_ONLINE = Color(72,135,159)
+    private val NAME_COLOR_INGAME = Color(217, 244,186)
+    private val STATUS_TEXT_INGAME = Color(133,178,82)
+    private val GAME_NAME_COLOR_INGAME = Color(133,178,82)
+    private val STATUS_LINE_INGAME = Color(133,178,82)
 
     // 成就专用颜色常量
     private val ACHIEVEMENT_CARD_BG_COLOR = Color(35, 38, 47)
