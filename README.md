@@ -52,4 +52,7 @@ notifyAchievement: true
 
 <img width="451" height="528" alt="image" src="https://github.com/user-attachments/assets/72e8ed23-cf4e-4449-8b57-e7c8542783ed" />
 
+<img width="414" height="177" alt="image" src="https://github.com/user-attachments/assets/f003b4da-3665-454c-9cdc-92841d9495f6" />
+
+
 
