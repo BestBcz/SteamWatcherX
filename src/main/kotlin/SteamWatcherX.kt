@@ -15,7 +15,7 @@ object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "1.0.0",
+        version = "1.1.0",
     ) {
 
         author("BCZ")
@@ -179,7 +179,7 @@ object SteamWatcherX : KotlinPlugin(
                 val text = when {
                     achievement != null -> "${summary.personaname} 解锁了成就 ${achievement.name}"
                     summary.gameextrainfo != null -> "${summary.personaname} 正在玩 ${summary.gameextrainfo}"
-                    summary.personastate == 1 -> "${summary.personaname} 当前状态 在线"
+                    summary.personastate >= 1 -> "${summary.personaname} 当前状态 在线"
                     else -> "${summary.personaname} 当前状态 离线"
                 }
 

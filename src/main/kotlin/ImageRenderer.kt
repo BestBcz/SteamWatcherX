@@ -8,23 +8,28 @@ import javax.imageio.ImageIO
 
 object ImageRenderer {
 
-    // 颜色和字体常量
-    private val BG_COLOR = Color(24, 26, 33)
-    private val BORDER_COLOR_ONLINE = Color(0, 174, 239)
-    private val BORDER_COLOR_OFFLINE = Color(128, 128, 128)
-    private val BORDER_COLOR_GAMING = Color(144, 238, 144)
-    private val TEXT_COLOR_PRIMARY = Color.WHITE
-    private val TEXT_COLOR_SECONDARY = Color.LIGHT_GRAY
-    private val TEXT_COLOR_GAME = Color(135, 206, 250)
-    private val ACHIEVEMENT_TITLE_COLOR = Color.WHITE
-    private val ACHIEVEMENT_DESC_COLOR = Color(150, 150, 150)
-    private val ACHIEVEMENT_PERCENT_COLOR = Color(100, 100, 100)
-    private val ACHIEVEMENT_CARD_BG_COLOR = Color(35, 38, 47)
+    // 基础颜色和字体常量
+    private val BG_COLOR = Color(42, 46, 51)
     private val FONT_YAHEI_BOLD_16 = Font("Microsoft YaHei", Font.BOLD, 16)
     private val FONT_YAHEI_PLAIN_14 = Font("Microsoft YaHei", Font.PLAIN, 14)
     private val FONT_YAHEI_BOLD_14 = Font("Microsoft YaHei", Font.BOLD, 14)
     private val FONT_YAHEI_PLAIN_12 = Font("Microsoft YaHei", Font.PLAIN, 12)
     private val FONT_YAHEI_PLAIN_10 = Font("Microsoft YaHei", Font.PLAIN, 10)
+
+    // 玩家状态颜色常量
+    private val NAME_COLOR_OFFLINE = Color(200, 200, 200)
+    private val STATUS_TEXT_OFFLINE = Color(130, 130, 130)
+    private val STATUS_LINE_OFFLINE = Color(130, 130, 130)
+    private val NAME_COLOR_ONLINE = Color(220, 230, 255)
+    private val STATUS_TEXT_ONLINE = Color(125, 182, 229)
+    private val STATUS_LINE_ONLINE = Color(125, 182, 229)
+    private val NAME_COLOR_INGAME = Color(184, 255, 11)
+    private val STATUS_TEXT_INGAME = Color(130, 130, 130)
+    private val GAME_NAME_COLOR_INGAME = Color(144, 238, 144)
+    private val STATUS_LINE_INGAME = Color(144, 238, 144)
+
+    // 成就专用颜色常量
+    private val ACHIEVEMENT_CARD_BG_COLOR = Color(35, 38, 47)
 
 
     fun render(summary: SteamApi.PlayerSummary, achievement: AchievementInfo? = null): ByteArray {
@@ -36,39 +41,71 @@ object ImageRenderer {
     }
 
     private fun renderPlayerSummary(summary: SteamApi.PlayerSummary): ByteArray {
-        val width = 290
-        val height = 100
+        val width = 300
+        val height = 90
+        val avatarSize = 56
         val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
         val g = image.createGraphics() as Graphics2D
 
         setupGraphics(g)
-        drawBackground(g, width, height) // 调用辅助函数绘制背景
+        drawBackground(g, width, height)
 
-        // 头像
-        drawAvatar(g, summary.avatarfull, (height - 64) / 2)
+        val avatarY = (height - avatarSize) / 2
+        drawAvatar(g, summary.avatarfull, avatarY, avatarSize)
 
-        // 玩家名称
-        g.color = TEXT_COLOR_PRIMARY
+        var playerNameColor: Color
+        var statusLineColor: Color
+        var statusTextColor: Color
+        var gameNameColor: Color? = null
+        val statusText: String
+        val gameName: String?
+
+        when {
+            summary.gameextrainfo != null -> {
+                playerNameColor = NAME_COLOR_INGAME
+                statusLineColor = STATUS_LINE_INGAME
+                statusTextColor = STATUS_TEXT_INGAME
+                gameNameColor = GAME_NAME_COLOR_INGAME
+                statusText = "正在玩"
+                gameName = summary.gameextrainfo
+            }
+            summary.personastate >= 1 -> {
+                playerNameColor = NAME_COLOR_ONLINE
+                statusLineColor = STATUS_LINE_ONLINE
+                statusTextColor = STATUS_TEXT_ONLINE
+                statusText = "在线"
+                gameName = null
+            }
+            else -> {
+                playerNameColor = NAME_COLOR_OFFLINE
+                statusLineColor = STATUS_LINE_OFFLINE
+                statusTextColor = STATUS_TEXT_OFFLINE
+                statusText = "离线"
+                gameName = null
+            }
+        }
+
+        val lineX = 20 + avatarSize + 5
+        g.color = statusLineColor
+        g.stroke = BasicStroke(3f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER)
+        g.drawLine(lineX, avatarY, lineX, avatarY + avatarSize)
+
+        val textX = lineX + 12
+
+        g.color = playerNameColor
         g.font = FONT_YAHEI_BOLD_16
-        g.drawString(summary.personaname, 100, 35)
+        g.drawString(summary.personaname, textX, 33)
 
-        // 状态
         g.font = FONT_YAHEI_PLAIN_14
-        if (summary.gameextrainfo != null) {
-            g.color = TEXT_COLOR_GAME
-            g.drawString("正在游玩: ${summary.gameextrainfo}", 100, 60)
+        if (gameName != null) {
+            g.color = statusTextColor
+            g.drawString(statusText, textX, 54)
+            g.color = gameNameColor!!
+            g.drawString(gameName, textX, 74)
         } else {
-            g.color = TEXT_COLOR_SECONDARY
-            g.drawString(if (summary.personastate == 1) "在线" else "离线", 100, 60)
+            g.color = statusTextColor
+            g.drawString(statusText, textX, 64)
         }
-
-        // 边框
-        val borderColor = when {
-            summary.gameextrainfo != null -> BORDER_COLOR_GAMING
-            summary.personastate == 1 -> BORDER_COLOR_ONLINE
-            else -> BORDER_COLOR_OFFLINE
-        }
-        drawBorder(g, width, height, borderColor)
 
         g.dispose()
         return toByteArray(image)
@@ -79,53 +116,37 @@ object ImageRenderer {
         val height = 150
         val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
         val g = image.createGraphics() as Graphics2D
-
         setupGraphics(g)
-        drawBackground(g, width, height) // 调用辅助函数绘制背景
-
-        // 解锁信息
-        g.color = TEXT_COLOR_PRIMARY
+        drawBackground(g, width, height)
+        g.color = Color.WHITE
         g.font = FONT_YAHEI_PLAIN_14
         g.drawString("${summary.personaname} 解锁了成就", 20, 35)
-
-        // 成就卡片
         val cardX = 15
         val cardY = 55
         val cardWidth = width - 30
         val cardHeight = 80
         g.color = ACHIEVEMENT_CARD_BG_COLOR
         g.fillRoundRect(cardX, cardY, cardWidth, cardHeight, 10, 10)
-
-        // 成就图标
         AvatarCache.getAvatarImage(achievement.iconUrl)?.let { icon ->
             val iconScaled = icon.getScaledInstance(48, 48, Image.SCALE_SMOOTH)
             g.drawImage(iconScaled, cardX + 15, cardY + (cardHeight - 48) / 2, null)
         }
-
-        // 成就标题
-        g.color = ACHIEVEMENT_TITLE_COLOR
+        g.color = Color.WHITE
         g.font = FONT_YAHEI_BOLD_14
         g.drawString(achievement.name, cardX + 80, cardY + 30)
-
-        // "已解锁成就"
-        g.color = ACHIEVEMENT_DESC_COLOR
+        g.color = Color(150, 150, 150)
         g.font = FONT_YAHEI_PLAIN_12
         g.drawString("已解锁成就", cardX + 80, cardY + 50)
-
-        // 全局解锁率
-        g.color = ACHIEVEMENT_PERCENT_COLOR
+        g.color = Color(100, 100, 100)
         g.font = FONT_YAHEI_PLAIN_10
         val percentageText = "全球解锁率: ${String.format("%.1f", achievement.globalUnlockPercentage)}%"
         g.drawString(percentageText, cardX + 80, cardY + 68)
-
-        // 边框
-        drawBorder(g, width, height, BORDER_COLOR_GAMING)
-
+        drawBorder(g, width, height, STATUS_LINE_INGAME)
         g.dispose()
         return toByteArray(image)
     }
 
-    // --- 辅助绘图函数 ---
+    //辅助绘图函数
     private fun setupGraphics(g: Graphics2D) {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
@@ -144,17 +165,17 @@ object ImageRenderer {
             }
         }
         g.color = BG_COLOR
-        g.fillRoundRect(0, 0, width, height, 20, 20)
+        g.fillRoundRect(0, 0, width, height, 10, 10)
     }
 
-    private fun drawAvatar(g: Graphics2D, url: String, yPos: Int) {
+    private fun drawAvatar(g: Graphics2D, url: String, yPos: Int, size: Int) {
         AvatarCache.getAvatarImage(url)?.let { avatar ->
-            val avatarScaled = avatar.getScaledInstance(64, 64, Image.SCALE_SMOOTH)
-            val mask = BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB)
+            val avatarScaled = avatar.getScaledInstance(size, size, Image.SCALE_SMOOTH)
+            val mask = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
             val g2 = mask.createGraphics()
             setupGraphics(g2)
             g2.composite = AlphaComposite.Src
-            g2.fill(RoundRectangle2D.Float(0f, 0f, 64f, 64f, 16f, 16f))
+            g2.fill(RoundRectangle2D.Float(0f, 0f, size.toFloat(), size.toFloat(), 10f, 10f))
             g2.composite = AlphaComposite.SrcIn
             g2.drawImage(avatarScaled, 0, 0, null)
             g2.dispose()
