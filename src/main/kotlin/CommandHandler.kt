@@ -7,16 +7,23 @@ import kotlinx.coroutines.launch
 
 object CommandHandler {
 
+    // 定义一个正则表达式，用于匹配一个或多个数字
+    private val steamIdRegex = Regex("\\d+")
+
     suspend fun handle(event: GroupMessageEvent) {
         val msg = event.message.content.trim()
         val sender = event.sender.id
         val groupId = event.group.id
 
         when {
-            // === 绑定 ===
+            //绑定
             msg.startsWith("/bind ") -> {
-                val steamId = msg.removePrefix("/bind ").trim()
-                if (steamId.isNotEmpty()) {
+                val inputText = msg.removePrefix("/bind ").trim()
+
+                // 使用正则表达式从输入中查找第一个数字串作为 SteamID
+                val steamId = steamIdRegex.find(inputText)?.value
+
+                if (steamId != null) {
                     // 检查是否已存在相同的绑定
                     val existing = Subscribers.bindings.any { it.groupId == groupId && it.qqId == sender && it.steamId == steamId }
                     if (!existing) {
@@ -25,7 +32,7 @@ object CommandHandler {
 
                         event.group.sendMessage("✅ 绑定成功！QQ: $sender → 群: $groupId → SteamID: $steamId")
 
-                        // ✅ 立即初始化监控
+                        // 立即初始化监控
                         SteamWatcherX.scope.launch {
                             SteamWatcherX.checkUpdatesOnce(groupId, sender, steamId)
                         }
@@ -33,28 +40,35 @@ object CommandHandler {
                         event.group.sendMessage("⚠️ 此 SteamID 已绑定，无需重复绑定")
                     }
                 } else {
-                    event.group.sendMessage("❌ 绑定失败，SteamID 不能为空")
+                    event.group.sendMessage("❌ 绑定失败，未在您的输入中找到有效的数字 SteamID")
                 }
             }
 
-            // === 解绑 ===
+            //解绑
             msg.startsWith("/unbind ") -> {
-                val steamId = msg.removePrefix("/unbind ").trim()
-                val removed = if (steamId.isNotEmpty()) {
-                    Subscribers.bindings.removeIf { it.groupId == groupId && it.qqId == sender && it.steamId == steamId }
-                } else {
-                    Subscribers.bindings.removeIf { it.groupId == groupId && it.qqId == sender }
-                }
-                SteamWatcherX.savePluginData(Subscribers)
+                val inputText = msg.removePrefix("/unbind ").trim()
 
-                if (removed) {
-                    event.group.sendMessage("✅ 已解除绑定${if (steamId.isNotEmpty()) " (SteamID=$steamId)" else ""}")
+                val removed: Boolean
+
+                // 判断用户是想解绑所有，还是解绑特定ID
+                if (inputText.isNotEmpty()) {
+
+                    val steamId = steamIdRegex.find(inputText)?.value
+                    if (steamId != null) {
+                        removed = Subscribers.bindings.removeIf { it.groupId == groupId && it.qqId == sender && it.steamId == steamId }
+                        if (removed) event.group.sendMessage("✅ 已解除绑定 (SteamID=$steamId)") else event.group.sendMessage("⚠️ 未找到对应的绑定")
+                    } else {
+                        // 输入了内容但不是数字ID
+                        event.group.sendMessage("⚠️ 未在您的输入中找到有效的数字 SteamID")
+                    }
                 } else {
-                    event.group.sendMessage("⚠️ 未找到对应的绑定")
+                    // 用户只输入了 /unbind，解绑该用户在本群的所有ID
+                    removed = Subscribers.bindings.removeIf { it.groupId == groupId && it.qqId == sender }
+                    if (removed) event.group.sendMessage("✅ 已解除您在本群的所有绑定") else event.group.sendMessage("⚠️ 未找到对应的绑定")
                 }
             }
 
-            // === 查看已绑定列表 ===
+            // 查看已绑定列表
             msg.startsWith("/list") -> {
                 val groupBindings = Subscribers.bindings.filter { it.groupId == groupId }
                 if (groupBindings.isEmpty()) {
