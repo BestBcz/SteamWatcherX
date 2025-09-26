@@ -28,8 +28,6 @@ object ImageRenderer {
     private val GAME_NAME_COLOR_INGAME = Color(133,178,82)
     private val STATUS_LINE_INGAME = Color(133,178,82)
 
-    // 成就专用颜色常量
-    private val ACHIEVEMENT_CARD_BG_COLOR = Color(35, 38, 47)
 
 
     fun render(summary: SteamApi.PlayerSummary, achievement: AchievementInfo? = null): ByteArray {
@@ -85,7 +83,7 @@ object ImageRenderer {
             }
         }
 
-        val lineX = 20 + avatarSize + 5
+        val lineX = 20 + avatarSize + 3
         g.color = statusLineColor
         g.stroke = BasicStroke(3f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER)
         g.drawLine(lineX, avatarY, lineX, avatarY + avatarSize)
@@ -112,36 +110,53 @@ object ImageRenderer {
     }
 
     private fun renderAchievementUnlock(summary: SteamApi.PlayerSummary, achievement: AchievementInfo): ByteArray {
-        val width = 290
-        val height = 150
+        val width = 300
+        val height = 90
         val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
         val g = image.createGraphics() as Graphics2D
         setupGraphics(g)
+
+        // 绘制背景
         drawBackground(g, width, height)
-        g.color = Color.WHITE
-        g.font = FONT_YAHEI_PLAIN_14
-        g.drawString("${summary.personaname} 解锁了成就", 20, 35)
-        val cardX = 15
-        val cardY = 55
-        val cardWidth = width - 30
-        val cardHeight = 80
-        g.color = ACHIEVEMENT_CARD_BG_COLOR
-        g.fillRoundRect(cardX, cardY, cardWidth, cardHeight, 10, 10)
+
+        // 绘制成就图标
+        val iconSize = 56
+        val iconX = 15
+        val iconY = (height - iconSize) / 2
         AvatarCache.getAvatarImage(achievement.iconUrl)?.let { icon ->
-            val iconScaled = icon.getScaledInstance(48, 48, Image.SCALE_SMOOTH)
-            g.drawImage(iconScaled, cardX + 15, cardY + (cardHeight - 48) / 2, null)
+
+            val iconScaled = icon.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH)
+            val mask = BufferedImage(iconSize, iconSize, BufferedImage.TYPE_INT_ARGB)
+            val g2 = mask.createGraphics()
+            setupGraphics(g2)
+            g2.composite = AlphaComposite.Src
+            g2.fill(RoundRectangle2D.Float(0f, 0f, iconSize.toFloat(), iconSize.toFloat(), 10f, 10f))
+            g2.composite = AlphaComposite.SrcIn
+            g2.drawImage(iconScaled, 0, 0, null)
+            g2.dispose()
+            g.drawImage(mask, iconX, iconY, null)
         }
+
+        // 绘制右侧的文字信息
+        val textX = iconX + iconSize + 15
+
+        // 成就名称
         g.color = Color.WHITE
         g.font = FONT_YAHEI_BOLD_14
-        g.drawString(achievement.name, cardX + 80, cardY + 30)
+        g.drawString(achievement.name, textX, 30)
+
+        // 文字
         g.color = Color(150, 150, 150)
         g.font = FONT_YAHEI_PLAIN_12
-        g.drawString("已解锁成就", cardX + 80, cardY + 50)
+        g.drawString("已解锁成就", textX, 52)
+
+        // 全球解锁率
         g.color = Color(100, 100, 100)
         g.font = FONT_YAHEI_PLAIN_10
         val percentageText = "全球解锁率: ${String.format("%.1f", achievement.globalUnlockPercentage)}%"
-        g.drawString(percentageText, cardX + 80, cardY + 68)
-        drawBorder(g, width, height, STATUS_LINE_INGAME)
+        g.drawString(percentageText, textX, 70)
+
+
         g.dispose()
         return toByteArray(image)
     }
@@ -183,11 +198,6 @@ object ImageRenderer {
         }
     }
 
-    private fun drawBorder(g: Graphics2D, width: Int, height: Int, color: Color) {
-        g.color = color
-        g.stroke = BasicStroke(2f)
-        g.drawRoundRect(1, 1, width - 2, height - 2, 20, 20)
-    }
 
     private fun toByteArray(image: BufferedImage): ByteArray {
         val output = ByteArrayOutputStream()
