@@ -90,8 +90,8 @@ object SteamApi {
         val game: GameInfo
     )
     @Serializable data class GameInfo(
-        val gameName: String, //接收游戏译名
-        val availableGameStats: AvailableGameStats
+        val gameName: String? = null,
+        val availableGameStats: AvailableGameStats? = null
     )
     @Serializable data class
     AvailableGameStats(

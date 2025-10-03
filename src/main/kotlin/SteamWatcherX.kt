@@ -82,14 +82,13 @@ object SteamWatcherX : KotlinPlugin(
     private suspend fun checkUser(groupId: Long, qq: Long, steamId: String, forceNotify: Boolean = false) {
         try {
             val summary = SteamApi.getPlayerSummary(steamId) ?: return
-            var translatedGameName: String? = null // 用于存储翻译后的游戏名
+            var translatedGameName: String? = null
 
             if (summary.gameid != null && Config.enableTranslation) {
                 val schema = SteamApi.getSchemaForGame(summary.gameid)
-                if (schema != null) {
-                    if (schema.game.gameName.containsChinese()) {
-                        translatedGameName = schema.game.gameName
-                    }
+                // 使用安全调用 (?.) 访问可能为空的 gameName
+                if (schema?.game?.gameName?.containsChinese() == true) {
+                    translatedGameName = schema.game.gameName
                 }
             }
 
@@ -100,7 +99,7 @@ object SteamWatcherX : KotlinPlugin(
                 currentState = newState
                 lastStates[steamId] = currentState
                 if (forceNotify) {
-                    sendUpdate(qq, groupId, summary, translatedGameName = translatedGameName)
+                    sendUpdate(qq, groupId, summary)
                 } else {
                     logger.info("记录初始状态：steamId=$steamId，不发送通知")
                 }
@@ -119,10 +118,9 @@ object SteamWatcherX : KotlinPlugin(
                 logger.info("检测到重大状态变化：steamId=$steamId -> 发送通知")
                 currentState.personastate = newState.personastate
                 currentState.gameid = newState.gameid
-                sendUpdate(qq, groupId, summary, translatedGameName = translatedGameName)
+                sendUpdate(qq, groupId, summary)
             }
 
-            // 成就检查
             if (summary.gameid != null) {
                 val appId = summary.gameid
                 if (appId != currentState.lastGameId) {
@@ -140,19 +138,21 @@ object SteamWatcherX : KotlinPlugin(
                     val schema = SteamApi.getSchemaForGame(appId)
                     val globalPercentages = SteamApi.getGlobalAchievementPercentages(appId)?.associateBy { it.name }
 
-                    if (schema == null) {
-                        logger.warning("获取游戏 ($appId) 的 Schema 失败，无法发送成就通知")
+                    // 检查 schema 或其内部的 game 对象是否为空
+                    if (schema?.game == null) {
+                        logger.warning("获取游戏 ($appId) 的 Schema 失败或返回为空，无法发送成就通知")
                         return
                     }
 
-                    // 更新翻译
-                    if (schema.game.gameName.containsChinese()) {
+                    // 使用安全调用 (?.) 访问可能为空的 gameName
+                    if (schema.game.gameName?.containsChinese() == true) {
                         translatedGameName = schema.game.gameName
                     }
 
                     val sortedNew = newAchievements.sortedBy { it.unlocktime }
                     for (ach in sortedNew) {
-                        val schemaAch = schema.game.availableGameStats.achievements.find { it.name == ach.apiname }
+                        // 使用安全调用 (?.) 访问可能为空的成就列表
+                        val schemaAch = schema.game.availableGameStats?.achievements?.find { it.name == ach.apiname }
                         if (schemaAch != null) {
                             val info = ImageRenderer.AchievementInfo(
                                 name = schemaAch.displayName,
