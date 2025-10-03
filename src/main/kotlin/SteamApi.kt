@@ -23,7 +23,9 @@ object SteamApi {
 
     fun getSchemaForGame(appId: String): GameSchema? {
         val apiKey = Config.apiKey.takeIf { it.isNotBlank() } ?: return null
-        val url = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$apiKey&appid=$appId"
+        // 如果开启了翻译，则在URL中添加语言参数 l={language}
+        val langParam = if (Config.enableTranslation) "&l=${Config.language}" else ""
+        val url = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$apiKey&appid=$appId$langParam"
         return executeRequest(url)
     }
 
@@ -87,8 +89,8 @@ object SteamApi {
     GameSchema(
         val game: GameInfo
     )
-    @Serializable data class
-    GameInfo(
+    @Serializable data class GameInfo(
+        val gameName: String, //接收游戏译名
         val availableGameStats: AvailableGameStats
     )
     @Serializable data class

@@ -19,4 +19,10 @@ object Config : AutoSavePluginConfig("SteamWatcherXConfig") {
 
     @ValueDescription("是否开启成就解锁通知")
     val notifyAchievement: Boolean by value(true)
+
+    @ValueDescription("是否启用翻译功能 (请求中文名称)")
+    val enableTranslation: Boolean by value(true)
+
+    @ValueDescription("请求的语言 (schinese = 简体中文, tchinese = 繁体中文, english = 英语)")
+    val language: String by value("schinese")
 }

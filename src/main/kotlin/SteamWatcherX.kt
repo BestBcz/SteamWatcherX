@@ -15,7 +15,7 @@ object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "1.1.2",
+        version = "1.2.0",
     ) {
 
         author("BCZ")
@@ -61,6 +61,11 @@ object SteamWatcherX : KotlinPlugin(
         }
     }
 
+    // 是否包含中文字符
+    private fun String.containsChinese(): Boolean {
+        return Regex("[\\u4e00-\\u9fa5]").containsMatchIn(this)
+    }
+
     private suspend fun checkUpdates() {
         if (Subscribers.bindings.isEmpty()) return
         logger.info("开始检查 ${Subscribers.bindings.size} 个绑定的 Steam 状态...")
@@ -77,6 +82,17 @@ object SteamWatcherX : KotlinPlugin(
     private suspend fun checkUser(groupId: Long, qq: Long, steamId: String, forceNotify: Boolean = false) {
         try {
             val summary = SteamApi.getPlayerSummary(steamId) ?: return
+            var translatedGameName: String? = null // 用于存储翻译后的游戏名
+
+            if (summary.gameid != null && Config.enableTranslation) {
+                val schema = SteamApi.getSchemaForGame(summary.gameid)
+                if (schema != null) {
+                    if (schema.game.gameName.containsChinese()) {
+                        translatedGameName = schema.game.gameName
+                    }
+                }
+            }
+
             val newState = UserState(summary.personastate, summary.gameid)
             var currentState = lastStates[steamId]
 
@@ -84,7 +100,7 @@ object SteamWatcherX : KotlinPlugin(
                 currentState = newState
                 lastStates[steamId] = currentState
                 if (forceNotify) {
-                    sendUpdate(qq, groupId, summary)
+                    sendUpdate(qq, groupId, summary, translatedGameName = translatedGameName)
                 } else {
                     logger.info("记录初始状态：steamId=$steamId，不发送通知")
                 }
@@ -96,19 +112,17 @@ object SteamWatcherX : KotlinPlugin(
                 return
             }
 
-            //判断状态
             val newIsOnline = newState.personastate > 0
             val currentIsOnline = currentState.personastate > 0
 
             if (newIsOnline != currentIsOnline || newState.gameid != currentState.gameid) {
                 logger.info("检测到重大状态变化：steamId=$steamId -> 发送通知")
-                // 更新内存中的状态
                 currentState.personastate = newState.personastate
                 currentState.gameid = newState.gameid
-                sendUpdate(qq, groupId, summary)
+                sendUpdate(qq, groupId, summary, translatedGameName = translatedGameName)
             }
 
-            // 成就检查逻辑
+            // 成就检查
             if (summary.gameid != null) {
                 val appId = summary.gameid
                 if (appId != currentState.lastGameId) {
@@ -123,14 +137,17 @@ object SteamWatcherX : KotlinPlugin(
                 if (newAchievements.isNotEmpty()) {
                     logger.info("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
 
-                    val schemaDeferred = async { SteamApi.getSchemaForGame(appId) }
-                    val globalPercentagesDeferred = async { SteamApi.getGlobalAchievementPercentages(appId) }
-                    val schema = schemaDeferred.await()
-                    val globalPercentages = globalPercentagesDeferred.await()?.associateBy { it.name }
+                    val schema = SteamApi.getSchemaForGame(appId)
+                    val globalPercentages = SteamApi.getGlobalAchievementPercentages(appId)?.associateBy { it.name }
 
                     if (schema == null) {
                         logger.warning("获取游戏 ($appId) 的 Schema 失败，无法发送成就通知")
                         return
+                    }
+
+                    // 更新翻译
+                    if (schema.game.gameName.containsChinese()) {
+                        translatedGameName = schema.game.gameName
                     }
 
                     val sortedNew = newAchievements.sortedBy { it.unlocktime }
@@ -143,7 +160,7 @@ object SteamWatcherX : KotlinPlugin(
                                 iconUrl = schemaAch.icon,
                                 globalUnlockPercentage = globalPercentages?.get(ach.apiname)?.percent ?: 0.0
                             )
-                            sendUpdate(qq, groupId, summary, info)
+                            sendUpdate(qq, groupId, summary, info, translatedGameName)
                             delay(1000)
                         }
                     }
@@ -158,22 +175,32 @@ object SteamWatcherX : KotlinPlugin(
         }
     }
 
-    private suspend fun sendUpdate(qq: Long, groupId: Long, summary: SteamApi.PlayerSummary, achievement: ImageRenderer.AchievementInfo? = null) {
-        // 优化通知开关
+    private suspend fun sendUpdate(
+        qq: Long,
+        groupId: Long,
+        summary: SteamApi.PlayerSummary,
+        achievement: ImageRenderer.AchievementInfo? = null,
+        translatedGameName: String? = null
+    ) {
         val isOnline = summary.personastate > 0
-        val isPlaying = summary.gameextrainfo != null
+        // 优先使用翻译后的游戏名
+        val gameName = translatedGameName ?: summary.gameextrainfo
+        val isPlaying = gameName != null
 
         val shouldNotify = when {
             achievement != null && Config.notifyAchievement -> true
             isPlaying && Config.notifyGame -> true
             !isPlaying && isOnline && Config.notifyOnline -> true
-            !isOnline && Config.notifyOnline -> true // 离线通知
+            !isOnline && Config.notifyOnline -> true
             else -> false
         }
         if (!shouldNotify) return
 
         try {
-            val imageBytes = ImageRenderer.render(summary, achievement)
+            // 将包含翻译名称的 summary 传递给渲染器
+            val finalSummary = summary.copy(gameextrainfo = gameName)
+            val imageBytes = ImageRenderer.render(finalSummary, achievement)
+
             val bot = Bot.instances.firstOrNull() ?: return
             val group = bot.getGroup(groupId) ?: return
 
@@ -182,18 +209,16 @@ object SteamWatcherX : KotlinPlugin(
                 val img: Image = group.uploadImage(resource)
 
                 val text = when {
-                    achievement != null -> "${summary.personaname} 解锁了成就 ${achievement.name}"
-                    isPlaying -> "${summary.personaname} 正在玩 ${summary.gameextrainfo}"
+                    achievement != null -> {
+                        val finalAchName = if (achievement.name.containsChinese()) achievement.name else achievement.name
+                        "${summary.personaname} 在 ${gameName ?: "游戏"} 中解锁了成就 ${finalAchName}"
+                    }
+                    isPlaying -> "${summary.personaname} 正在玩 $gameName"
                     isOnline -> "${summary.personaname} 当前状态 在线"
                     else -> "${summary.personaname} 当前状态 离线"
                 }
 
-                val message = MessageChainBuilder()
-                    .append(text)
-                    .append("\n")
-                    .append(img)
-                    .build()
-
+                val message = MessageChainBuilder().append(text).append("\n").append(img).build()
                 group.sendMessage(message)
 
             } finally {
