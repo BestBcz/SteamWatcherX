@@ -28,6 +28,9 @@ object ImageRenderer {
     private val GAME_NAME_COLOR_INGAME = Color(133,178,82)
     private val STATUS_LINE_INGAME = Color(133,178,82)
 
+    // 成就专用颜色常量
+    private val RARE_ACHIEVEMENT_COLOR = Color(223,164,73)
+
 
 
     fun render(summary: SteamApi.PlayerSummary, achievement: AchievementInfo? = null): ByteArray {
@@ -116,6 +119,9 @@ object ImageRenderer {
         val g = image.createGraphics() as Graphics2D
         setupGraphics(g)
 
+        // 判断成就是否为稀有 (<10%)
+        val isRare = achievement.globalUnlockPercentage < 10.0
+
         // 绘制背景
         drawBackground(g, width, height)
 
@@ -123,8 +129,16 @@ object ImageRenderer {
         val iconSize = 56
         val iconX = 15
         val iconY = (height - iconSize) / 2
-        AvatarCache.getAvatarImage(achievement.iconUrl)?.let { icon ->
 
+        if (isRare) {
+            val glowSize = iconSize + 6
+            val glowX = iconX - 3
+            val glowY = iconY - 3
+            g.color = RARE_ACHIEVEMENT_COLOR
+            g.fill(RoundRectangle2D.Float(glowX.toFloat(), glowY.toFloat(), glowSize.toFloat(), glowSize.toFloat(), 13f, 13f))
+        }
+
+        AvatarCache.getAvatarImage(achievement.iconUrl)?.let { icon ->
             val iconScaled = icon.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH)
             val mask = BufferedImage(iconSize, iconSize, BufferedImage.TYPE_INT_ARGB)
             val g2 = mask.createGraphics()
@@ -145,17 +159,16 @@ object ImageRenderer {
         g.font = FONT_YAHEI_BOLD_14
         g.drawString(achievement.name, textX, 30)
 
-        // 文字
+        // 文字 "已解锁成就"
         g.color = Color(150, 150, 150)
         g.font = FONT_YAHEI_PLAIN_12
         g.drawString("已解锁成就", textX, 52)
 
         // 全球解锁率
-        g.color = Color(100, 100, 100)
+        g.color = if (isRare) RARE_ACHIEVEMENT_COLOR else Color(100, 100, 100)
         g.font = FONT_YAHEI_PLAIN_10
         val percentageText = "全球解锁率: ${String.format("%.1f", achievement.globalUnlockPercentage)}%"
         g.drawString(percentageText, textX, 70)
-
 
         g.dispose()
         return toByteArray(image)
