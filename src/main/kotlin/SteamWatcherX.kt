@@ -96,15 +96,19 @@ object SteamWatcherX : KotlinPlugin(
                 return
             }
 
-            // 状态或游戏变化通知
-            if (newState.personastate != currentState.personastate || newState.gameid != currentState.gameid) {
-                logger.info("状态变化：steamId=$steamId -> 发送通知")
+            //判断状态
+            val newIsOnline = newState.personastate > 0
+            val currentIsOnline = currentState.personastate > 0
+
+            if (newIsOnline != currentIsOnline || newState.gameid != currentState.gameid) {
+                logger.info("检测到重大状态变化：steamId=$steamId -> 发送通知")
+                // 更新内存中的状态
                 currentState.personastate = newState.personastate
                 currentState.gameid = newState.gameid
                 sendUpdate(qq, groupId, summary)
             }
 
-            // 成就检查
+            // 成就检查逻辑
             if (summary.gameid != null) {
                 val appId = summary.gameid
                 if (appId != currentState.lastGameId) {
@@ -119,7 +123,6 @@ object SteamWatcherX : KotlinPlugin(
                 if (newAchievements.isNotEmpty()) {
                     logger.info("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
 
-                    // 并发获取成就信息和全局解锁率
                     val schemaDeferred = async { SteamApi.getSchemaForGame(appId) }
                     val globalPercentagesDeferred = async { SteamApi.getGlobalAchievementPercentages(appId) }
                     val schema = schemaDeferred.await()
@@ -141,7 +144,7 @@ object SteamWatcherX : KotlinPlugin(
                                 globalUnlockPercentage = globalPercentages?.get(ach.apiname)?.percent ?: 0.0
                             )
                             sendUpdate(qq, groupId, summary, info)
-                            delay(1000) // 避免刷屏，延迟1秒发送下一个成就
+                            delay(1000)
                         }
                     }
                     currentState.lastUnlockTime = sortedNew.maxOf { it.unlocktime }
@@ -156,12 +159,15 @@ object SteamWatcherX : KotlinPlugin(
     }
 
     private suspend fun sendUpdate(qq: Long, groupId: Long, summary: SteamApi.PlayerSummary, achievement: ImageRenderer.AchievementInfo? = null) {
-        // 根据配置决定是否发送通知
+        // 优化通知开关
+        val isOnline = summary.personastate > 0
+        val isPlaying = summary.gameextrainfo != null
+
         val shouldNotify = when {
             achievement != null && Config.notifyAchievement -> true
-            summary.gameextrainfo != null && Config.notifyGame -> true
-            summary.personastate == 1 && Config.notifyOnline -> true
-            summary.personastate != 1 && Config.notifyOnline -> true
+            isPlaying && Config.notifyGame -> true
+            !isPlaying && isOnline && Config.notifyOnline -> true
+            !isOnline && Config.notifyOnline -> true // 离线通知
             else -> false
         }
         if (!shouldNotify) return
@@ -175,17 +181,16 @@ object SteamWatcherX : KotlinPlugin(
             try {
                 val img: Image = group.uploadImage(resource)
 
-
                 val text = when {
                     achievement != null -> "${summary.personaname} 解锁了成就 ${achievement.name}"
-                    summary.gameextrainfo != null -> "${summary.personaname} 正在玩 ${summary.gameextrainfo}"
-                    summary.personastate >= 1 -> "${summary.personaname} 当前状态 在线"
+                    isPlaying -> "${summary.personaname} 正在玩 ${summary.gameextrainfo}"
+                    isOnline -> "${summary.personaname} 当前状态 在线"
                     else -> "${summary.personaname} 当前状态 离线"
                 }
 
                 val message = MessageChainBuilder()
                     .append(text)
-                    .append("\n") // 换行
+                    .append("\n")
                     .append(img)
                     .build()
 
