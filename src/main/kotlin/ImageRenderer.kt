@@ -27,6 +27,7 @@ object ImageRenderer {
     private val STATUS_TEXT_INGAME = Color(133,178,82)
     private val GAME_NAME_COLOR_INGAME = Color(133,178,82)
     private val STATUS_LINE_INGAME = Color(133,178,82)
+    private val NORMAL_GREY = Color(150,150,150)
 
     // 成就专用颜色常量
     private val RARE_ACHIEVEMENT_COLOR = Color(223,164,73)
@@ -65,7 +66,7 @@ object ImageRenderer {
             summary.gameextrainfo != null -> {
                 playerNameColor = NAME_COLOR_INGAME
                 statusLineColor = STATUS_LINE_INGAME
-                statusTextColor = STATUS_TEXT_INGAME
+                statusTextColor = NORMAL_GREY
                 gameNameColor = GAME_NAME_COLOR_INGAME
                 statusText = "正在玩"
                 gameName = summary.gameextrainfo
@@ -160,7 +161,7 @@ object ImageRenderer {
         g.drawString(achievement.name, textX, 30)
 
         // 文字 "已解锁成就"
-        g.color = Color(150, 150, 150)
+        g.color = NORMAL_GREY
         g.font = FONT_YAHEI_PLAIN_12
         g.drawString("已解锁成就", textX, 52)
 
