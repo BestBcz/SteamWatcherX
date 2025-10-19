@@ -1,6 +1,9 @@
 
 # SteamWatcherX
 
+[![MiraiForum](https://img.shields.io/badge/Forum-Mirai?style=flat-square&label=Mirai
+)](https://mirai.mamoe.net/topic/2831/steamwatcherx-%E8%A7%86%E5%A5%B8%E7%BE%A4%E5%8F%8B%E7%9A%84steam%E7%8A%B6%E6%80%81%E5%B9%B6%E5%B0%86%E7%8A%B6%E6%80%81%E5%8F%98%E6%9B%B4%E5%8F%91%E9%80%81%E5%88%B0%E6%8C%87%E5%AE%9Aqq%E7%BE%A4-steam%E8%A7%86%E5%A5%B8%E5%99%A8?_=1760916893487)
+
 视奸你的群友-SteamWatcherX 是一个 mirai 插件，可以订阅群友的Steam状态并将状态变更发送到指定qq群聊
 
 _仓库正在积极维护更新中，喜欢的话可以点个免费的star⭐支持我_
