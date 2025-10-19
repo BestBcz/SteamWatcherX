@@ -212,7 +212,7 @@ object SteamWatcherX : KotlinPlugin(
 
                 // 生成文本
                 val text = when {
-                    achievement != null -> "${summary.personastate} 在 ${displayGameName ?: "游戏"} 中解锁了成就 ${achievement.name}"
+                    achievement != null -> "${summary.personaname} 在 ${displayGameName ?: "游戏"} 中解锁了成就 ${achievement.name}"
                     isPlaying -> "${summary.personaname} 正在玩 $displayGameName"
                     isOnline -> "${summary.personaname} 当前状态 在线"
                     else -> "${summary.personaname} 当前状态 离线"
