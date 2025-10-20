@@ -61,5 +61,8 @@ notifyAchievement: true
 
 <img width="414" height="177" alt="image" src="https://github.com/user-attachments/assets/f003b4da-3665-454c-9cdc-92841d9495f6" />
 
+<img width="383" height="186" alt="image" src="https://github.com/user-attachments/assets/b6701cd4-34d4-4c13-9dc3-5ea84f2fb9ab" />
+
+
 
 
