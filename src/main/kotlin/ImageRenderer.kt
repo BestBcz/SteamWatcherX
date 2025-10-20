@@ -98,13 +98,20 @@ object ImageRenderer {
         g.font = FONT_YAHEI_BOLD_16
         g.drawString(summary.personaname, textX, 33)
 
-        g.font = FONT_YAHEI_PLAIN_14
+
         if (gameName != null) {
+            // “正在玩”的字体设置
+            g.font = FONT_YAHEI_PLAIN_12 //
             g.color = statusTextColor
             g.drawString(statusText, textX, 54)
+
+            // 游戏名称的字体设置
+            g.font = FONT_YAHEI_PLAIN_14
             g.color = gameNameColor!!
             g.drawString(gameName, textX, 74)
         } else {
+            // “在线”或“离线”的字体设置
+            g.font = FONT_YAHEI_PLAIN_14
             g.color = statusTextColor
             g.drawString(statusText, textX, 64)
         }
