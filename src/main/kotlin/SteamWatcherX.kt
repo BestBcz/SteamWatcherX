@@ -15,7 +15,7 @@ object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "1.3.0",
+        version = "1.3.1",
     ) {
 
         author("BCZ")
@@ -61,7 +61,7 @@ object SteamWatcherX : KotlinPlugin(
         }
     }
 
-    // 新增辅助函数：用于检测字符串是否包含中文字符
+    // 检测字符串是否包含中文字符
     private fun String.containsChinese(): Boolean {
         return Regex("[\\u4e00-\\u9fa5]").containsMatchIn(this)
     }
@@ -83,16 +83,14 @@ object SteamWatcherX : KotlinPlugin(
         try {
             val summary = SteamApi.getPlayerSummary(steamId) ?: return
 
-            var displayGameName = summary.gameextrainfo // 默认使用API返回的英文名
+            var displayGameName = summary.gameextrainfo
 
-            // 如果开启了翻译，并且用户正在玩游戏，则尝试获取中文名
+            // 翻译逻辑
             if (Config.enableTranslation && summary.gameid != null) {
-                val schema = SteamApi.getSchemaForGame(summary.gameid)
-                // 安全地访问 gameName，如果它不为空且包含中文，则替换掉默认名
-                schema?.game?.gameName?.let { translatedName ->
-                    if (translatedName.containsChinese()) {
-                        displayGameName = translatedName
-                    }
+                // 获取游戏名
+                val translatedName = SteamApi.getStoreGameName(summary.gameid)
+                if (translatedName != null && translatedName.containsChinese()) {
+                    displayGameName = translatedName
                 }
             }
 
@@ -103,7 +101,6 @@ object SteamWatcherX : KotlinPlugin(
                 currentState = newState
                 lastStates[steamId] = currentState
                 if (forceNotify) {
-                    // 首次通知时也传入翻译后的游戏名
                     sendUpdate(qq, groupId, summary, displayGameName = displayGameName)
                 } else {
                     logger.info("记录初始状态：steamId=$steamId，不发送通知")
@@ -119,7 +116,6 @@ object SteamWatcherX : KotlinPlugin(
             val newIsOnline = newState.personastate > 0
             val currentIsOnline = currentState.personastate > 0
 
-            // 状态变化
             if (newIsOnline != currentIsOnline || newState.gameid != currentState.gameid) {
                 logger.info("检测到重大状态变化：steamId=$steamId -> 发送通知")
                 currentState.personastate = newState.personastate
@@ -127,7 +123,6 @@ object SteamWatcherX : KotlinPlugin(
                 sendUpdate(qq, groupId, summary, displayGameName = displayGameName)
             }
 
-            // 成就检查
             if (summary.gameid != null) {
                 val appId = summary.gameid
                 if (appId != currentState.lastGameId) {
@@ -142,11 +137,10 @@ object SteamWatcherX : KotlinPlugin(
                 if (newAchievements.isNotEmpty()) {
                     logger.info("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
 
-
+                    // 成就翻译
                     val schema = SteamApi.getSchemaForGame(appId)
                     val globalPercentages = SteamApi.getGlobalAchievementPercentages(appId)?.associateBy { it.name }
 
-                    // 安全检查：确保 schema 和其内部的 game 对象不为空
                     if (schema?.game == null) {
                         logger.warning("获取游戏 ($appId) 的 Schema 失败或返回为空，无法发送成就通知")
                         return
@@ -154,16 +148,15 @@ object SteamWatcherX : KotlinPlugin(
 
                     val sortedNew = newAchievements.sortedBy { it.unlocktime }
                     for (ach in sortedNew) {
-                        // 安全地访问可能为空的成就列表
                         val schemaAch = schema.game.availableGameStats?.achievements?.find { it.name == ach.apiname }
                         if (schemaAch != null) {
                             val info = ImageRenderer.AchievementInfo(
-                                name = schemaAch.displayName,
+                                name = schemaAch.displayName, // 成就名翻译依然来自 schema
                                 description = schemaAch.description,
                                 iconUrl = schemaAch.icon,
                                 globalUnlockPercentage = globalPercentages?.get(ach.apiname)?.percent ?: 0.0
                             )
-                            // 成就通知也传入翻译后的游戏名
+                            // 传入已经获取到的、正确的游戏译名
                             sendUpdate(qq, groupId, summary, info, displayGameName)
                             delay(1000)
                         }
@@ -184,7 +177,7 @@ object SteamWatcherX : KotlinPlugin(
         groupId: Long,
         summary: SteamApi.PlayerSummary,
         achievement: ImageRenderer.AchievementInfo? = null,
-        displayGameName: String? = null // 使用最终确定的游戏名
+        displayGameName: String? = null
     ) {
         val isOnline = summary.personastate > 0
         val isPlaying = displayGameName != null
