@@ -25,6 +25,8 @@ object SteamWatcherX : KotlinPlugin(
 
     internal val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    private const val GITHUB_REPO_URL = "BestBcz/SteamWatcherX"
+
     internal data class UserState(
         var personastate: Int,
         var gameid: String?,
@@ -74,6 +76,8 @@ object SteamWatcherX : KotlinPlugin(
         }
         logger.info("✅ SteamWatcherX 插件已启用 (v${description.version})")
 
+        scope.launch { checkForUpdates() }
+
         GlobalEventChannel.subscribeAlways<GroupMessageEvent> {
             scope.launch { CommandHandler.handle(this@subscribeAlways) }
         }
@@ -104,7 +108,25 @@ object SteamWatcherX : KotlinPlugin(
             checkUser(it.groupId, it.steamId)
         }
     }
+    private suspend fun checkForUpdates() {
 
+        logDebug("UpdateChecker: 正在检查插件更新...")
+        val releaseInfo = SteamApi.getLatestReleaseInfo(GITHUB_REPO_URL) ?: return
+
+        val currentVersionString = description.version.toString()
+        val latestVersionString = releaseInfo.tagName.removePrefix("v")
+
+        if (latestVersionString != currentVersionString) {
+            logInfo("========================================")
+            logInfo("  发现新版本！")
+            logInfo("  当前版本: v$currentVersionString")
+            logInfo("  最新版本: v$latestVersionString")
+            logInfo("  请前往 ${releaseInfo.htmlUrl} 手动下载更新。")
+            logInfo("========================================")
+        } else {
+            logDebug("UpdateChecker: 当前已是最新版本 (v$currentVersionString)。")
+        }
+    }
     suspend fun checkUpdatesOnce(groupId: Long, qq: Long, steamId: String) {
         logInfo("手动初始化检查：steamId=$steamId (qq=$qq, 群=$groupId)")
         checkUser(groupId, steamId, forceNotify = true)

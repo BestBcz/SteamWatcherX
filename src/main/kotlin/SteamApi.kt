@@ -2,13 +2,14 @@ package com.bcz
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.SerialName
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 
 object SteamApi {
@@ -84,7 +85,33 @@ object SteamApi {
             return null
         }
     }
+    // github数据类
+    @Serializable
+    data class GitHubRelease(
+        @SerialName("tag_name") val tagName: String,
+        @SerialName("html_url") val htmlUrl: String
+    )
 
+    // GitHub函数
+    fun getLatestReleaseInfo(repoUrl: String): GitHubRelease? {
+        val url = "https://api.github.com/repos/$repoUrl/releases/latest"
+        SteamWatcherX.logDebug("UpdateChecker: Requesting $url")
+
+        try {
+            val request = Request.Builder().url(url).build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    SteamWatcherX.logWarn("检查更新失败，GitHub API 返回: ${response.code}")
+                    return null
+                }
+                val body = response.body?.string() ?: return null
+                return json.decodeFromString<GitHubRelease>(body)
+            }
+        } catch (e: Exception) {
+            SteamWatcherX.logError("检查更新时发生网络错误", e)
+            return null
+        }
+    }
 
     // 数据类
     @Serializable data class PlayerResponse(val response: PlayerList)
