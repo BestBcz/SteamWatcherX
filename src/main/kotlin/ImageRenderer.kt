@@ -24,7 +24,7 @@ object ImageRenderer {
     private val STATUS_TEXT_ONLINE = Color(72,135,159)
     private val STATUS_LINE_ONLINE = Color(72,135,159)
     private val NAME_COLOR_INGAME = Color(217, 244,186)
-    private val STATUS_TEXT_INGAME = Color(133,178,82)
+    //private val STATUS_TEXT_INGAME = Color(133,178,82)
     private val GAME_NAME_COLOR_INGAME = Color(133,178,82)
     private val STATUS_LINE_INGAME = Color(133,178,82)
     private val NORMAL_GREY = Color(150,150,150)
@@ -55,9 +55,9 @@ object ImageRenderer {
         val avatarY = (height - avatarSize) / 2
         drawAvatar(g, summary.avatarfull, avatarY, avatarSize)
 
-        var playerNameColor: Color
-        var statusLineColor: Color
-        var statusTextColor: Color
+        val playerNameColor: Color
+        val statusLineColor: Color
+        val statusTextColor: Color
         var gameNameColor: Color? = null
         val statusText: String
         val gameName: String?
