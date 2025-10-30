@@ -15,7 +15,7 @@ object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "1.3.1",
+        version = "1.4.0",
     ) {
 
         author("BCZ")
@@ -70,16 +70,16 @@ object SteamWatcherX : KotlinPlugin(
         if (Subscribers.bindings.isEmpty()) return
         logger.info("开始检查 ${Subscribers.bindings.size} 个绑定的 Steam 状态...")
         Subscribers.bindings.forEach {
-            checkUser(it.groupId, it.qqId, it.steamId)
+            checkUser(it.groupId, it.steamId)
         }
     }
 
     suspend fun checkUpdatesOnce(groupId: Long, qq: Long, steamId: String) {
         logger.info("手动初始化检查：steamId=$steamId (qq=$qq, 群=$groupId)")
-        checkUser(groupId, qq, steamId, forceNotify = true)
+        checkUser(groupId, steamId, forceNotify = true)
     }
 
-    private suspend fun checkUser(groupId: Long, qq: Long, steamId: String, forceNotify: Boolean = false) {
+    private suspend fun checkUser(groupId: Long, steamId: String, forceNotify: Boolean = false) {
         try {
             val summary = SteamApi.getPlayerSummary(steamId) ?: return
 
@@ -101,7 +101,7 @@ object SteamWatcherX : KotlinPlugin(
                 currentState = newState
                 lastStates[steamId] = currentState
                 if (forceNotify) {
-                    sendUpdate(qq, groupId, summary, displayGameName = displayGameName)
+                    sendUpdate(groupId, summary, displayGameName = displayGameName)
                 } else {
                     logger.info("记录初始状态：steamId=$steamId，不发送通知")
                 }
@@ -120,7 +120,7 @@ object SteamWatcherX : KotlinPlugin(
                 logger.info("检测到重大状态变化：steamId=$steamId -> 发送通知")
                 currentState.personastate = newState.personastate
                 currentState.gameid = newState.gameid
-                sendUpdate(qq, groupId, summary, displayGameName = displayGameName)
+                sendUpdate(groupId, summary, displayGameName = displayGameName)
             }
 
             if (summary.gameid != null) {
@@ -157,7 +157,7 @@ object SteamWatcherX : KotlinPlugin(
                                 globalUnlockPercentage = globalPercentages?.get(ach.apiname)?.percent ?: 0.0
                             )
                             // 传入已经获取到的、正确的游戏译名
-                            sendUpdate(qq, groupId, summary, info, displayGameName)
+                            sendUpdate(groupId, summary, info, displayGameName)
                             delay(1000)
                         }
                     }
@@ -173,7 +173,7 @@ object SteamWatcherX : KotlinPlugin(
     }
 
     private suspend fun sendUpdate(
-        qq: Long,
+
         groupId: Long,
         summary: SteamApi.PlayerSummary,
         achievement: ImageRenderer.AchievementInfo? = null,
