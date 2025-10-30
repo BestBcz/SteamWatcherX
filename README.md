@@ -34,6 +34,7 @@ _仓库正在积极维护更新中，喜欢的话可以点个免费的star⭐支
 
 ## 指令（Command）
 
+
 SteamWatcherX 指令列表: 
 ```
 /sw bind [SteamID] - 绑定 Steam 账号
