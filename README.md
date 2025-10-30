@@ -34,9 +34,13 @@ _仓库正在积极维护更新中，喜欢的话可以点个免费的star⭐支
 
 ## 指令（Command）
 
-/bind
-/unbind
-/list
+SteamWatcherX 指令列表: 
+```
+/sw bind [SteamID] - 绑定 Steam 账号
+/sw unbind [SteamID] - 解绑 Steam 账号 (不填ID则解绑所有)
+/sw list - 查看本群所有绑定
+/sw help - 显示此帮助信息
+```
 
 ## 配置（Config）
 
