@@ -25,4 +25,7 @@ object Config : AutoSavePluginConfig("SteamWatcherXConfig") {
 
     @ValueDescription("请求的语言 (schinese = 简体中文, tchinese = 繁体中文, english = 英语)")
     val language: String by value("schinese")
+
+    @ValueDescription("日志等级 (debug, normal, mute)")
+    val logLevel: String by value("normal")
 }

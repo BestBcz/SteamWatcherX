@@ -34,12 +34,43 @@ object SteamWatcherX : KotlinPlugin(
 
     private val lastStates = mutableMapOf<String, UserState>()
 
+    // 日志辅助函数
+
+    //仅在 "debug" 模式下输出 *
+    internal fun logDebug(message: String) {
+        if (Config.logLevel.equals("debug", ignoreCase = true)) {
+            logger.info("[DEBUG] $message")
+        }
+    }
+
+    // 在 "debug" 和 "normal" 模式下输出
+    internal fun logInfo(message: String) {
+        val level = Config.logLevel.lowercase()
+        if (level == "debug" || level == "normal") {
+            logger.info(message)
+        }
+    }
+
+    // 在 "debug" 和 "normal" 模式下输出 (即 "mute" 模式下不输出)
+    internal fun logWarn(message: String) {
+        if (Config.logLevel.lowercase() != "mute") {
+            logger.warning(message)
+        }
+    }
+
+    // 在 "debug" 和 "normal" 模式下输出 (即 "mute" 模式下不输出)
+    internal fun logError(message: String, e: Exception? = null) {
+        if (Config.logLevel.lowercase() != "mute") {
+            if (e != null) logger.error(message, e) else logger.error(message)
+        }
+    }
+
     override fun onEnable() {
         Config.reload()
         Subscribers.reload()
 
         if (Config.apiKey.isBlank()) {
-            logger.warning("⚠️ Steam API Key 未设置，插件无法正常工作！")
+            logWarn("⚠️ Steam API Key 未设置，插件无法正常工作！")
         }
         logger.info("✅ SteamWatcherX 插件已启用 (v${description.version})")
 
@@ -54,7 +85,7 @@ object SteamWatcherX : KotlinPlugin(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    logger.warning("检查更新主循环出错: ${e.message}")
+                    logError("检查更新主循环出错", e)
                 }
                 delay(Config.interval)
             }
@@ -68,18 +99,19 @@ object SteamWatcherX : KotlinPlugin(
 
     private suspend fun checkUpdates() {
         if (Subscribers.bindings.isEmpty()) return
-        logger.info("开始检查 ${Subscribers.bindings.size} 个绑定的 Steam 状态...")
+        logDebug("开始检查 ${Subscribers.bindings.size} 个绑定的 Steam 状态...")
         Subscribers.bindings.forEach {
             checkUser(it.groupId, it.steamId)
         }
     }
 
     suspend fun checkUpdatesOnce(groupId: Long, qq: Long, steamId: String) {
-        logger.info("手动初始化检查：steamId=$steamId (qq=$qq, 群=$groupId)")
+        logInfo("手动初始化检查：steamId=$steamId (qq=$qq, 群=$groupId)")
         checkUser(groupId, steamId, forceNotify = true)
     }
 
     private suspend fun checkUser(groupId: Long, steamId: String, forceNotify: Boolean = false) {
+        logDebug("checkUser: 开始检查 steamId=$steamId")
         try {
             val summary = SteamApi.getPlayerSummary(steamId) ?: return
 
@@ -87,10 +119,12 @@ object SteamWatcherX : KotlinPlugin(
 
             // 翻译逻辑
             if (Config.enableTranslation && summary.gameid != null) {
+                logDebug("checkUser: 正在获取 $steamId (appid=${summary.gameid}) 的中文游戏名...")
                 // 获取游戏名
                 val translatedName = SteamApi.getStoreGameName(summary.gameid)
                 if (translatedName != null && translatedName.containsChinese()) {
                     displayGameName = translatedName
+                    logDebug("checkUser: 游戏名翻译成功: $displayGameName")
                 }
             }
 
@@ -101,9 +135,10 @@ object SteamWatcherX : KotlinPlugin(
                 currentState = newState
                 lastStates[steamId] = currentState
                 if (forceNotify) {
+                    logDebug("checkUser: forceNotify=true, 发送初始状态更新。")
                     sendUpdate(groupId, summary, displayGameName = displayGameName)
                 } else {
-                    logger.info("记录初始状态：steamId=$steamId，不发送通知")
+                    logInfo("记录初始状态：steamId=$steamId，不发送通知")
                 }
                 if (summary.gameid != null) {
                     val achievements = SteamApi.getPlayerAchievements(steamId, summary.gameid)
@@ -117,7 +152,7 @@ object SteamWatcherX : KotlinPlugin(
             val currentIsOnline = currentState.personastate > 0
 
             if (newIsOnline != currentIsOnline || newState.gameid != currentState.gameid) {
-                logger.info("检测到重大状态变化：steamId=$steamId -> 发送通知")
+                logDebug("检测到状态变化：steamId=$steamId -> 发送通知")
                 currentState.personastate = newState.personastate
                 currentState.gameid = newState.gameid
                 sendUpdate(groupId, summary, displayGameName = displayGameName)
@@ -131,23 +166,25 @@ object SteamWatcherX : KotlinPlugin(
                     currentState.lastUnlockTime = achievements?.filter { it.achieved == 1 }?.maxOfOrNull { it.unlocktime } ?: 0L
                     return
                 }
-
+                logDebug("checkUser: 正在检查 $steamId (appid=$appId) 的新成就...")
                 val achievements = SteamApi.getPlayerAchievements(steamId, appId) ?: return
                 val newAchievements = achievements.filter { it.achieved == 1 && it.unlocktime > currentState.lastUnlockTime }
                 if (newAchievements.isNotEmpty()) {
-                    logger.info("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
+                    logInfo("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
 
                     // 成就翻译
+                    logDebug("checkUser: 正在获取成就的 schema 和 globalPercentages...")
                     val schema = SteamApi.getSchemaForGame(appId)
                     val globalPercentages = SteamApi.getGlobalAchievementPercentages(appId)?.associateBy { it.name }
 
                     if (schema?.game == null) {
-                        logger.warning("获取游戏 ($appId) 的 Schema 失败或返回为空，无法发送成就通知")
+                        logWarn("获取游戏 ($appId) 的 Schema 失败或返回为空，无法发送成就通知")
                         return
                     }
 
                     val sortedNew = newAchievements.sortedBy { it.unlocktime }
                     for (ach in sortedNew) {
+                        logDebug("checkUser: 处理新成就 ${ach.apiname}")
                         val schemaAch = schema.game.availableGameStats?.achievements?.find { it.name == ach.apiname }
                         if (schemaAch != null) {
                             val info = ImageRenderer.AchievementInfo(
@@ -168,7 +205,7 @@ object SteamWatcherX : KotlinPlugin(
                 currentState.lastUnlockTime = 0L
             }
         } catch (e: Exception) {
-            logger.warning("获取 Steam 状态失败: steamId=$steamId → ${e.message}")
+            logError("获取 Steam 状态失败: steamId=$steamId → ${e.message}")
         }
     }
 
@@ -181,7 +218,7 @@ object SteamWatcherX : KotlinPlugin(
     ) {
         val isOnline = summary.personastate > 0
         val isPlaying = displayGameName != null
-
+        logDebug("sendUpdate: 准备发送消息... isPlaying=$isPlaying, isOnline=$isOnline, achievement=${achievement != null}")
         val shouldNotify = when {
             achievement != null && Config.notifyAchievement -> true
             isPlaying && Config.notifyGame -> true
@@ -193,12 +230,13 @@ object SteamWatcherX : KotlinPlugin(
 
         try {
             // 将包含翻译名称的 summary 传递给渲染器
+            logDebug("sendUpdate: 正在渲染图片...")
             val finalSummary = summary.copy(gameextrainfo = displayGameName)
             val imageBytes = ImageRenderer.render(finalSummary, achievement)
 
             val bot = Bot.instances.firstOrNull() ?: return
             val group = bot.getGroup(groupId) ?: return
-
+            logDebug("sendUpdate: 正在上传图片到群 $groupId...")
             val resource = imageBytes.toExternalResource()
             try {
                 val img: Image = group.uploadImage(resource)
@@ -218,7 +256,7 @@ object SteamWatcherX : KotlinPlugin(
                 withContext(Dispatchers.IO) { resource.close() }
             }
         } catch (e: Exception) {
-            logger.warning("发送更新失败 (group=$groupId, steam=${summary.steamid}) -> ${e.message}")
+            logError("发送更新失败 (group=$groupId, steam=${summary.steamid}) -> ${e.message}")
         }
     }
 
