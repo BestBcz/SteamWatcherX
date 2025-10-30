@@ -46,7 +46,7 @@ object SteamWatcherX : KotlinPlugin(
     }
 
     // 在 "debug" 和 "normal" 模式下输出
-    internal fun logInfo(message: String) {
+    private fun logInfo(message: String) {
         val level = Config.logLevel.lowercase()
         if (level == "debug" || level == "normal") {
             logger.info(message)
@@ -108,7 +108,7 @@ object SteamWatcherX : KotlinPlugin(
             checkUser(it.groupId, it.steamId)
         }
     }
-    private suspend fun checkForUpdates() {
+    private fun checkForUpdates() {
 
         logDebug("UpdateChecker: 正在检查插件更新...")
         val releaseInfo = SteamApi.getLatestReleaseInfo(GITHUB_REPO_URL) ?: return
