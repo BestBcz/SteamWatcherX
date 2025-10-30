@@ -96,7 +96,7 @@ object ImageRenderer {
 
         g.color = playerNameColor
         g.font = FONT_YAHEI_BOLD_16
-        g.drawString(summary.personaname, textX, 33)
+        g.drawString(summary.personaname, textX, 32)
 
 
         if (gameName != null) {
