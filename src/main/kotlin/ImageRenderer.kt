@@ -103,7 +103,7 @@ object ImageRenderer {
             // “正在玩”的字体设置
             g.font = FONT_YAHEI_PLAIN_12 //
             g.color = statusTextColor
-            g.drawString(statusText, textX, 50)
+            g.drawString(statusText, textX, 49)
 
             // 游戏名称的字体设置
             g.font = FONT_YAHEI_PLAIN_14
