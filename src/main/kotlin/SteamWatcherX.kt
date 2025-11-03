@@ -15,7 +15,7 @@ object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "1.4.0",
+        version = "1.4.1",
     ) {
 
         author("BCZ")
@@ -103,9 +103,15 @@ object SteamWatcherX : KotlinPlugin(
 
     private suspend fun checkUpdates() {
         if (Subscribers.bindings.isEmpty()) return
-        logDebug("开始检查 ${Subscribers.bindings.size} 个绑定的 Steam 状态...")
-        Subscribers.bindings.forEach {
-            checkUser(it.groupId, it.steamId)
+        logDebug("开始检查 ${Subscribers.bindings.size} 个总绑定...")
+
+        val groupedBindings = Subscribers.bindings.groupBy { it.steamId }
+        logDebug("将 ${Subscribers.bindings.size} 个绑定分成了 ${groupedBindings.size} 个独立 Steam 用户进行检查。")
+
+        groupedBindings.forEach { (steamId, userBindings) ->
+            // steamId 对应的所有绑定列表
+            checkUserAndNotify(steamId, userBindings)
+            delay(200) //
         }
     }
     private fun checkForUpdates() {
@@ -129,20 +135,19 @@ object SteamWatcherX : KotlinPlugin(
     }
     suspend fun checkUpdatesOnce(groupId: Long, qq: Long, steamId: String) {
         logInfo("手动初始化检查：steamId=$steamId (qq=$qq, 群=$groupId)")
-        checkUser(groupId, steamId, forceNotify = true)
+        val singleBinding = Subscribers.Subscription(groupId, qq, steamId)
+        checkUserAndNotify(steamId, listOf(singleBinding), forceNotify = true)
     }
 
-    private suspend fun checkUser(groupId: Long, steamId: String, forceNotify: Boolean = false) {
-        logDebug("checkUser: 开始检查 steamId=$steamId")
+    private suspend fun checkUserAndNotify(steamId: String, bindings: List<Subscribers.Subscription>, forceNotify: Boolean = false) {
+        logDebug("checkUser: 开始检查 steamId=$steamId (涉及 ${bindings.size} 个群组)")
         try {
+            // API 请求
             val summary = SteamApi.getPlayerSummary(steamId) ?: return
-
             var displayGameName = summary.gameextrainfo
 
-            // 翻译逻辑
             if (Config.enableTranslation && summary.gameid != null) {
                 logDebug("checkUser: 正在获取 $steamId (appid=${summary.gameid}) 的中文游戏名...")
-                // 获取游戏名
                 val translatedName = SteamApi.getStoreGameName(summary.gameid)
                 if (translatedName != null && translatedName.containsChinese()) {
                     displayGameName = translatedName
@@ -150,6 +155,7 @@ object SteamWatcherX : KotlinPlugin(
                 }
             }
 
+            // 状态检查
             val newState = UserState(summary.personastate, summary.gameid)
             var currentState = lastStates[steamId]
 
@@ -157,8 +163,10 @@ object SteamWatcherX : KotlinPlugin(
                 currentState = newState
                 lastStates[steamId] = currentState
                 if (forceNotify) {
-                    logDebug("checkUser: forceNotify=true, 发送初始状态更新。")
-                    sendUpdate(groupId, summary, displayGameName = displayGameName)
+                    logDebug("checkUser: forceNotify=true, 为 ${bindings.size} 个群组发送初始状态更新。")
+                    bindings.forEach { binding ->
+                        sendUpdate(binding.groupId, summary, displayGameName = displayGameName)
+                    }
                 } else {
                     logInfo("记录初始状态：steamId=$steamId，不发送通知")
                 }
@@ -173,13 +181,21 @@ object SteamWatcherX : KotlinPlugin(
             val newIsOnline = newState.personastate > 0
             val currentIsOnline = currentState.personastate > 0
 
+            // 状态变化通知
             if (newIsOnline != currentIsOnline || newState.gameid != currentState.gameid) {
-                logDebug("检测到状态变化：steamId=$steamId -> 发送通知")
+                logInfo("检测到重大状态变化：steamId=$steamId -> 准备为 ${bindings.size} 个群组发送通知")
                 currentState.personastate = newState.personastate
                 currentState.gameid = newState.gameid
-                sendUpdate(groupId, summary, displayGameName = displayGameName)
+
+                // 循环通知所有相关的群
+                bindings.forEach { binding ->
+                    sendUpdate(binding.groupId, summary, displayGameName = displayGameName)
+                }
+            } else {
+                logDebug("checkUser: 状态未发生重大变化 (old=${currentState.personastate}, new=${newState.personastate})，跳过通知。")
             }
 
+            // 成就检查
             if (summary.gameid != null) {
                 val appId = summary.gameid
                 if (appId != currentState.lastGameId) {
@@ -188,13 +204,14 @@ object SteamWatcherX : KotlinPlugin(
                     currentState.lastUnlockTime = achievements?.filter { it.achieved == 1 }?.maxOfOrNull { it.unlocktime } ?: 0L
                     return
                 }
+
                 logDebug("checkUser: 正在检查 $steamId (appid=$appId) 的新成就...")
                 val achievements = SteamApi.getPlayerAchievements(steamId, appId) ?: return
                 val newAchievements = achievements.filter { it.achieved == 1 && it.unlocktime > currentState.lastUnlockTime }
+
                 if (newAchievements.isNotEmpty()) {
                     logInfo("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
 
-                    // 成就翻译
                     logDebug("checkUser: 正在获取成就的 schema 和 globalPercentages...")
                     val schema = SteamApi.getSchemaForGame(appId)
                     val globalPercentages = SteamApi.getGlobalAchievementPercentages(appId)?.associateBy { it.name }
@@ -210,24 +227,31 @@ object SteamWatcherX : KotlinPlugin(
                         val schemaAch = schema.game.availableGameStats?.achievements?.find { it.name == ach.apiname }
                         if (schemaAch != null) {
                             val info = ImageRenderer.AchievementInfo(
-                                name = schemaAch.displayName, // 成就名翻译依然来自 schema
+                                name = schemaAch.displayName,
                                 description = schemaAch.description,
                                 iconUrl = schemaAch.icon,
                                 globalUnlockPercentage = globalPercentages?.get(ach.apiname)?.percent ?: 0.0
                             )
-                            // 传入已经获取到的、正确的游戏译名
-                            sendUpdate(groupId, summary, info, displayGameName)
+
+                            // 循环通知所有相关的群
+                            bindings.forEach { binding ->
+                                sendUpdate(binding.groupId, summary, info, displayGameName)
+                            }
                             delay(1000)
+                        } else {
+                            logWarn("checkUser: 找到了新成就 ${ach.apiname}，但在 schema 中未找到对应信息。")
                         }
                     }
                     currentState.lastUnlockTime = sortedNew.maxOf { it.unlocktime }
+                } else {
+                    logDebug("checkUser: 未检测到新成就。")
                 }
             } else {
                 currentState.lastGameId = null
                 currentState.lastUnlockTime = 0L
             }
         } catch (e: Exception) {
-            logError("获取 Steam 状态失败: steamId=$steamId → ${e.message}")
+            logError("获取 Steam 状态失败: steamId=$steamId", e)
         }
     }
 
