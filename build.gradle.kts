@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.bcz"
-version = "1.4.1"
+version = "1.4.2"
 
 repositories {
     maven("https://maven.aliyun.com/repository/public")
