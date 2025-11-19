@@ -142,16 +142,14 @@ object SteamWatcherX : KotlinPlugin(
     private suspend fun checkUserAndNotify(steamId: String, bindings: List<Subscribers.Subscription>, forceNotify: Boolean = false) {
         logDebug("checkUser: 开始检查 steamId=$steamId (涉及 ${bindings.size} 个群组)")
         try {
-            // API 请求
+            // 1. API 请求
             val summary = SteamApi.getPlayerSummary(steamId) ?: return
             var displayGameName = summary.gameextrainfo
 
             if (Config.enableTranslation && summary.gameid != null) {
-                logDebug("checkUser: 正在获取 $steamId (appid=${summary.gameid}) 的中文游戏名...")
                 val translatedName = SteamApi.getStoreGameName(summary.gameid)
                 if (translatedName != null && translatedName.containsChinese()) {
                     displayGameName = translatedName
-                    logDebug("checkUser: 游戏名翻译成功: $displayGameName")
                 }
             }
 
@@ -160,20 +158,28 @@ object SteamWatcherX : KotlinPlugin(
             var currentState = lastStates[steamId]
 
             if (currentState == null) {
+                // 初始化逻辑
+                var initialUnlockTime = 0L
+                if (summary.gameid != null) {
+                    // 必须成功获取一次成就列表作为基准，否则不初始化
+                    val achievements = SteamApi.getPlayerAchievements(steamId, summary.gameid)
+                    if (achievements == null) {
+                        logWarn("checkUser: 初始化延迟 - 无法获取 $steamId 的成就数据，将在下次循环重试。")
+                        return
+                    }
+                    initialUnlockTime = achievements.filter { it.achieved == 1 }.maxOfOrNull { it.unlocktime } ?: 0L
+                }
+
                 currentState = newState
+                currentState.lastUnlockTime = initialUnlockTime
                 lastStates[steamId] = currentState
+
                 if (forceNotify) {
-                    logDebug("checkUser: forceNotify=true, 为 ${bindings.size} 个群组发送初始状态更新。")
                     bindings.forEach { binding ->
                         sendUpdate(binding.groupId, summary, displayGameName = displayGameName)
                     }
                 } else {
-                    logInfo("记录初始状态：steamId=$steamId，不发送通知")
-                }
-                if (summary.gameid != null) {
-                    val achievements = SteamApi.getPlayerAchievements(steamId, summary.gameid)
-                    currentState.lastGameId = summary.gameid
-                    currentState.lastUnlockTime = achievements?.filter { it.achieved == 1 }?.maxOfOrNull { it.unlocktime } ?: 0L
+                    logInfo("记录初始状态：steamId=$steamId (基准时间=$initialUnlockTime)，不发送通知")
                 }
                 return
             }
@@ -183,47 +189,48 @@ object SteamWatcherX : KotlinPlugin(
 
             // 状态变化通知
             if (newIsOnline != currentIsOnline || newState.gameid != currentState.gameid) {
-                logInfo("检测到重大状态变化：steamId=$steamId -> 准备为 ${bindings.size} 个群组发送通知")
+                logInfo("检测到重大状态变化：steamId=$steamId")
                 currentState.personastate = newState.personastate
                 currentState.gameid = newState.gameid
 
-                // 循环通知所有相关的群
                 bindings.forEach { binding ->
                     sendUpdate(binding.groupId, summary, displayGameName = displayGameName)
                 }
-            } else {
-                logDebug("checkUser: 状态未发生重大变化 (old=${currentState.personastate}, new=${newState.personastate})，跳过通知。")
             }
 
-            // 成就检查
+            // 4. 成就检查
             if (summary.gameid != null) {
                 val appId = summary.gameid
+
+                // 游戏切换检测
                 if (appId != currentState.lastGameId) {
-                    currentState.lastGameId = appId
                     val achievements = SteamApi.getPlayerAchievements(steamId, appId)
-                    currentState.lastUnlockTime = achievements?.filter { it.achieved == 1 }?.maxOfOrNull { it.unlocktime } ?: 0L
-                    return
+                    if (achievements == null) return // 获取失败则下次再试
+
+                    currentState.lastGameId = appId
+                    currentState.lastUnlockTime = achievements.filter { it.achieved == 1 }.maxOfOrNull { it.unlocktime } ?: 0L
+                    logDebug("checkUser: 游戏切换至 $appId，基准时间重置为 ${currentState.lastUnlockTime}")
+                    return // 切换游戏时直接返回，不检测新成就
                 }
 
-                logDebug("checkUser: 正在检查 $steamId (appid=$appId) 的新成就...")
                 val achievements = SteamApi.getPlayerAchievements(steamId, appId) ?: return
                 val newAchievements = achievements.filter { it.achieved == 1 && it.unlocktime > currentState.lastUnlockTime }
 
                 if (newAchievements.isNotEmpty()) {
-                    logInfo("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
+                    val sortedNew = newAchievements.sortedBy { it.unlocktime }
 
-                    logDebug("checkUser: 正在获取成就的 schema 和 globalPercentages...")
+
+
+                    logInfo("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
                     val schema = SteamApi.getSchemaForGame(appId)
                     val globalPercentages = SteamApi.getGlobalAchievementPercentages(appId)?.associateBy { it.name }
 
                     if (schema?.game == null) {
-                        logWarn("获取游戏 ($appId) 的 Schema 失败或返回为空，无法发送成就通知")
+                        logWarn("获取游戏 Schema 失败，无法发送成就通知")
                         return
                     }
 
-                    val sortedNew = newAchievements.sortedBy { it.unlocktime }
                     for (ach in sortedNew) {
-                        logDebug("checkUser: 处理新成就 ${ach.apiname}")
                         val schemaAch = schema.game.availableGameStats?.achievements?.find { it.name == ach.apiname }
                         if (schemaAch != null) {
                             val info = ImageRenderer.AchievementInfo(
@@ -232,19 +239,13 @@ object SteamWatcherX : KotlinPlugin(
                                 iconUrl = schemaAch.icon,
                                 globalUnlockPercentage = globalPercentages?.get(ach.apiname)?.percent ?: 0.0
                             )
-
-                            // 循环通知所有相关的群
                             bindings.forEach { binding ->
                                 sendUpdate(binding.groupId, summary, info, displayGameName)
                             }
                             delay(1000)
-                        } else {
-                            logWarn("checkUser: 找到了新成就 ${ach.apiname}，但在 schema 中未找到对应信息。")
                         }
                     }
                     currentState.lastUnlockTime = sortedNew.maxOf { it.unlocktime }
-                } else {
-                    logDebug("checkUser: 未检测到新成就。")
                 }
             } else {
                 currentState.lastGameId = null
