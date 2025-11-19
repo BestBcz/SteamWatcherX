@@ -219,7 +219,12 @@ object SteamWatcherX : KotlinPlugin(
                 if (newAchievements.isNotEmpty()) {
                     val sortedNew = newAchievements.sortedBy { it.unlocktime }
 
-
+                    // 洪水防御
+                    if (sortedNew.size > 5) {
+                        logInfo("🛡️ 触发洪水防御：检测到 $steamId 同时有 ${sortedNew.size} 个成就变动，判定为历史数据同步，跳过推送。")
+                        currentState.lastUnlockTime = sortedNew.maxOf { it.unlocktime } // 仅更新时间
+                        return
+                    }
 
                     logInfo("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
                     val schema = SteamApi.getSchemaForGame(appId)
