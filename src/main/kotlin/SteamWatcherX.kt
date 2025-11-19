@@ -15,7 +15,7 @@ object SteamWatcherX : KotlinPlugin(
     JvmPluginDescription(
         id = "com.bcz.SteamWatcherX",
         name = "SteamWatcherX",
-        version = "1.4.2",
+        version = "1.4.3",
     ) {
 
         author("BCZ")
@@ -256,7 +256,6 @@ object SteamWatcherX : KotlinPlugin(
     }
 
     private suspend fun sendUpdate(
-
         groupId: Long,
         summary: SteamApi.PlayerSummary,
         achievement: ImageRenderer.AchievementInfo? = null,
@@ -265,12 +264,19 @@ object SteamWatcherX : KotlinPlugin(
         val isOnline = summary.personastate > 0
         val isPlaying = displayGameName != null
         logDebug("sendUpdate: 准备发送消息... isPlaying=$isPlaying, isOnline=$isOnline, achievement=${achievement != null}")
-        val shouldNotify = when {
-            achievement != null && Config.notifyAchievement -> true
-            isPlaying && Config.notifyGame -> true
-            !isPlaying && isOnline && Config.notifyOnline -> true
-            !isOnline && Config.notifyOnline -> true
-            else -> false
+
+        //通知
+        val shouldNotify = if (achievement != null) {
+            //检查成就通知开关
+            Config.notifyAchievement
+        } else {
+            // 2. 如果没有成就信息（是普通状态更新），则检查游戏/在线开关
+            when {
+                isPlaying && Config.notifyGame -> true
+                !isPlaying && isOnline && Config.notifyOnline -> true
+                !isOnline && Config.notifyOnline -> true
+                else -> false
+            }
         }
         if (!shouldNotify) return
 
