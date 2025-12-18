@@ -5,16 +5,40 @@ import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
+import java.io.InputStream
 
 object ImageRenderer {
 
+    private fun loadFont(isBold: Boolean, size: Float): Font {
+        val fontFileName = if (isBold) "/msyhbd.ttc" else "/msyh.ttc" //
+        var font: Font? = null
+
+        try {
+            // 尝试从资源文件加载
+            val stream: InputStream? = javaClass.getResourceAsStream(fontFileName)
+            if (stream != null) {
+                // 加载字体文件
+                font = Font.createFont(Font.TRUETYPE_FONT, stream)
+                // 注册到图形环境（某些系统需要）
+                val ge = GraphicsEnvironment.getLocalGraphicsEnvironment()
+                ge.registerFont(font)
+            } else {
+                SteamWatcherX.logWarn("⚠️ 未找到字体文件: $fontFileName，将使用系统默认字体")
+            }
+        } catch (e: Exception) {
+            SteamWatcherX.logError("❌ 加载字体失败: $fontFileName", e)
+        }
+
+        // 如果加载成功，衍生出指定大小；如果失败，回退到系统默认
+        return font?.deriveFont(size) ?: Font("Dialog", if (isBold) Font.BOLD else Font.PLAIN, size.toInt())
+    }
     // 基础颜色和字体常量
     private val BG_COLOR = Color(42, 46, 51)
-    private val FONT_YAHEI_PLAIN_13 = Font("Microsoft YaHei", Font.PLAIN, 13)
-    private val FONT_YAHEI_PLAIN_14 = Font("Microsoft YaHei", Font.PLAIN, 14)
-    private val FONT_YAHEI_BOLD_14 = Font("Microsoft YaHei", Font.BOLD, 14)
-    private val FONT_YAHEI_PLAIN_12 = Font("Microsoft YaHei", Font.PLAIN, 12)
-    private val FONT_YAHEI_PLAIN_10 = Font("Microsoft YaHei", Font.PLAIN, 10)
+    private val FONT_YAHEI_PLAIN_13 = loadFont(false, 13f)
+    private val FONT_YAHEI_PLAIN_14 = loadFont(false, 14f)
+    private val FONT_YAHEI_BOLD_14 = loadFont(true, 14f)
+    private val FONT_YAHEI_PLAIN_12 = loadFont(false, 12f)
+    private val FONT_YAHEI_PLAIN_10 = loadFont(false, 10f)
 
     // 玩家状态颜色常量
     private val NAME_COLOR_OFFLINE = Color(157, 157, 157)
