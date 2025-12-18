@@ -10,7 +10,7 @@ object ImageRenderer {
 
     // 基础颜色和字体常量
     private val BG_COLOR = Color(42, 46, 51)
-    private val FONT_YAHEI_BOLD_16 = Font("Microsoft YaHei", Font.BOLD, 16)
+    private val FONT_YAHEI_PLAIN_13 = Font("Microsoft YaHei", Font.PLAIN, 13)
     private val FONT_YAHEI_PLAIN_14 = Font("Microsoft YaHei", Font.PLAIN, 14)
     private val FONT_YAHEI_BOLD_14 = Font("Microsoft YaHei", Font.BOLD, 14)
     private val FONT_YAHEI_PLAIN_12 = Font("Microsoft YaHei", Font.PLAIN, 12)
@@ -87,7 +87,7 @@ object ImageRenderer {
             }
         }
 
-        val lineX = 20 + avatarSize + 3
+        val lineX = 20 + avatarSize + 2
         g.color = statusLineColor
         g.stroke = BasicStroke(3f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER)
         g.drawLine(lineX, avatarY, lineX, avatarY + avatarSize)
@@ -95,7 +95,7 @@ object ImageRenderer {
         val textX = lineX + 12
 
         g.color = playerNameColor
-        g.font = FONT_YAHEI_BOLD_16
+        g.font = FONT_YAHEI_BOLD_14
         g.drawString(summary.personaname, textX, 32)
 
 
@@ -106,7 +106,7 @@ object ImageRenderer {
             g.drawString(statusText, textX, 51)
 
             // 游戏名称的字体设置
-            g.font = FONT_YAHEI_PLAIN_14
+            g.font = FONT_YAHEI_PLAIN_13
             g.color = gameNameColor!!
             g.drawString(gameName, textX, 70)
         } else {
@@ -139,11 +139,11 @@ object ImageRenderer {
         val iconY = (height - iconSize) / 2
 
         if (isRare) {
-            val glowSize = iconSize + 6
+            val glowSize = iconSize + 4
             val glowX = iconX - 3
             val glowY = iconY - 3
             g.color = RARE_ACHIEVEMENT_COLOR
-            g.fill(RoundRectangle2D.Float(glowX.toFloat(), glowY.toFloat(), glowSize.toFloat(), glowSize.toFloat(), 13f, 13f))
+            g.fill(RoundRectangle2D.Float(glowX.toFloat(), glowY.toFloat(), glowSize.toFloat(), glowSize.toFloat(), 10f, 10f))
         }
 
         AvatarCache.getAvatarImage(achievement.iconUrl)?.let { icon ->
@@ -152,7 +152,7 @@ object ImageRenderer {
             val g2 = mask.createGraphics()
             setupGraphics(g2)
             g2.composite = AlphaComposite.Src
-            g2.fill(RoundRectangle2D.Float(0f, 0f, iconSize.toFloat(), iconSize.toFloat(), 10f, 10f))
+            g2.fill(RoundRectangle2D.Float(0f, 0f, iconSize.toFloat(), iconSize.toFloat(), 6f, 6f))
             g2.composite = AlphaComposite.SrcIn
             g2.drawImage(iconScaled, 0, 0, null)
             g2.dispose()
@@ -211,7 +211,7 @@ object ImageRenderer {
             val g2 = mask.createGraphics()
             setupGraphics(g2)
             g2.composite = AlphaComposite.Src
-            g2.fill(RoundRectangle2D.Float(0f, 0f, size.toFloat(), size.toFloat(), 10f, 10f))
+            g2.fill(RoundRectangle2D.Float(0f, 0f, size.toFloat(), size.toFloat(), 6f, 6f))
             g2.composite = AlphaComposite.SrcIn
             g2.drawImage(avatarScaled, 0, 0, null)
             g2.dispose()
