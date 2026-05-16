@@ -6,6 +6,7 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
 import java.io.InputStream
+import kotlin.math.roundToInt
 
 object ImageRenderer {
 
@@ -55,6 +56,11 @@ object ImageRenderer {
 
     // 成就专用颜色常量
     private val RARE_ACHIEVEMENT_COLOR = Color(223,164,73)
+    private const val RARE_GLOW_RESOURCE = "/rare_achievement_glow.png"
+    private const val RARE_GLOW_FRAME_LEFT = 382.0
+    private const val RARE_GLOW_FRAME_TOP = 370.0
+    private const val RARE_GLOW_FRAME_SIZE = 497.0
+    private val rareAchievementGlow: BufferedImage? by lazy { loadRareAchievementGlow() }
 
 
 
@@ -162,25 +168,11 @@ object ImageRenderer {
         val iconX = 15
         val iconY = (height - iconSize) / 2
 
-        if (isRare) {
-            val glowSize = iconSize + 4
-            val glowX = iconX - 3
-            val glowY = iconY - 3
-            g.color = RARE_ACHIEVEMENT_COLOR
-            g.fill(RoundRectangle2D.Float(glowX.toFloat(), glowY.toFloat(), glowSize.toFloat(), glowSize.toFloat(), 10f, 10f))
-        }
+        val icon = loadAchievementIcon(achievement)
 
-        AvatarCache.getAvatarImage(achievement.iconUrl)?.let { icon ->
-            val iconScaled = icon.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH)
-            val mask = BufferedImage(iconSize, iconSize, BufferedImage.TYPE_INT_ARGB)
-            val g2 = mask.createGraphics()
-            setupGraphics(g2)
-            g2.composite = AlphaComposite.Src
-            g2.fill(RoundRectangle2D.Float(0f, 0f, iconSize.toFloat(), iconSize.toFloat(), 6f, 6f))
-            g2.composite = AlphaComposite.SrcIn
-            g2.drawImage(iconScaled, 0, 0, null)
-            g2.dispose()
-            g.drawImage(mask, iconX, iconY, null)
+        drawAchievementIcon(g, icon, iconX, iconY, iconSize)
+        if (isRare) {
+            drawRareAchievementGlow(g, iconX, iconY, iconSize)
         }
 
         // 绘制右侧的文字信息
@@ -204,6 +196,51 @@ object ImageRenderer {
 
         g.dispose()
         return toByteArray(image)
+    }
+
+    private fun loadAchievementIcon(achievement: AchievementInfo): BufferedImage? {
+        achievement.iconImage?.let { return it }
+        return achievement.iconUrl.takeIf { it.isNotBlank() }?.let { AvatarCache.getAvatarImage(it) }
+    }
+
+    private fun drawAchievementIcon(g: Graphics2D, icon: BufferedImage?, iconX: Int, iconY: Int, iconSize: Int) {
+        if (icon != null) {
+            g.drawImage(icon, iconX, iconY, iconSize, iconSize, null)
+        } else {
+            g.color = Color(24, 30, 36)
+            g.fillRect(iconX, iconY, iconSize, iconSize)
+            g.color = Color(65, 72, 80)
+            g.drawRect(iconX, iconY, iconSize - 1, iconSize - 1)
+        }
+    }
+
+    private fun drawRareAchievementGlow(g: Graphics2D, iconX: Int, iconY: Int, iconSize: Int) {
+        val glow = rareAchievementGlow
+        if (glow == null) {
+            val oldStroke = g.stroke
+            g.color = RARE_ACHIEVEMENT_COLOR
+            g.stroke = BasicStroke(2f)
+            g.drawRect(iconX - 1, iconY - 1, iconSize + 1, iconSize + 1)
+            g.stroke = oldStroke
+            return
+        }
+
+        val scale = iconSize / RARE_GLOW_FRAME_SIZE
+        val drawWidth = (glow.width * scale).roundToInt()
+        val drawHeight = (glow.height * scale).roundToInt()
+        val drawX = iconX - (RARE_GLOW_FRAME_LEFT * scale).roundToInt()
+        val drawY = iconY - (RARE_GLOW_FRAME_TOP * scale).roundToInt()
+        g.drawImage(glow, drawX, drawY, drawWidth, drawHeight, null)
+    }
+
+    private fun loadRareAchievementGlow(): BufferedImage? {
+        val stream = javaClass.getResourceAsStream(RARE_GLOW_RESOURCE) ?: return null
+        return try {
+            stream.use { ImageIO.read(it) }
+        } catch (e: Exception) {
+            SteamWatcherX.logger.warning("加载 rare_achievement_glow.png 失败: ${e.message}")
+            null
+        }
     }
 
     //辅助绘图函数
@@ -254,6 +291,8 @@ object ImageRenderer {
         val name: String,
         val description: String?,
         val iconUrl: String,
-        val globalUnlockPercentage: Double
+        val globalUnlockPercentage: Double,
+        val iconImage: BufferedImage? = null
     )
+
 }
