@@ -19,6 +19,13 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 }
 
+tasks.register<JavaExec>("previewAchievementImage") {
+    group = "verification"
+    description = "Render a local achievement notification PNG for visual debugging."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.bcz.ImageRenderPreviewKt")
+}
+
 mirai {
     jvmTarget = JavaVersion.VERSION_1_8
 }
