@@ -58,15 +58,21 @@ notifyAchievement: true
 
 ## 插件图片
 
-<img width="451" height="528" alt="image" src="https://github.com/user-attachments/assets/72e8ed23-cf4e-4449-8b57-e7c8542783ed" />
+- <img width="451" height="528" alt="image" src="https://github.com/user-attachments/assets/72e8ed23-cf4e-4449-8b57-e7c8542783ed" />
 
 
-<img width="393" height="170" alt="image" src="https://github.com/user-attachments/assets/8840c302-dc4a-47dd-9d5f-c74e4941926d" />
+- <img width="381" height="173" alt="image" src="https://github.com/user-attachments/assets/97d52860-4fd2-4343-97fa-900c6aba15f7" />
 
 
-<img width="414" height="177" alt="image" src="https://github.com/user-attachments/assets/f003b4da-3665-454c-9cdc-92841d9495f6" />
+- <img width="389" height="180" alt="image" src="https://github.com/user-attachments/assets/ec661b11-0197-4ccc-9485-ecfc5db4bf32" />
 
-<img width="300" height="90" alt="rare-achievement" src="https://github.com/user-attachments/assets/7ffd9d9f-86e9-42e7-835b-b96aa5356b9f" />
+
+- <img width="414" height="177" alt="image" src="https://github.com/user-attachments/assets/f003b4da-3665-454c-9cdc-92841d9495f6" />
+
+
+- <img width="300" height="90" alt="rare-achievement" src="https://github.com/user-attachments/assets/7ffd9d9f-86e9-42e7-835b-b96aa5356b9f" />
+
+
 
 
 
