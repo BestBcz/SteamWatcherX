@@ -234,9 +234,16 @@ object ImageRenderer {
     }
 
     private fun loadRareAchievementGlow(): BufferedImage? {
-        val stream = javaClass.getResourceAsStream(RARE_GLOW_RESOURCE) ?: return null
+        val stream = javaClass.getResourceAsStream(RARE_GLOW_RESOURCE)
+        if (stream == null) {
+            SteamWatcherX.logWarn("未找到稀有成就光效资源: $RARE_GLOW_RESOURCE，将使用 fallback 黄框")
+            return null
+        }
         return try {
-            stream.use { ImageIO.read(it) }
+            stream.use { ImageIO.read(it) } ?: run {
+                SteamWatcherX.logWarn("稀有成就光效资源无法解析为图片: $RARE_GLOW_RESOURCE，将使用 fallback 黄框")
+                null
+            }
         } catch (e: Exception) {
             SteamWatcherX.logger.warning("加载 rare_achievement_glow.png 失败: ${e.message}")
             null
