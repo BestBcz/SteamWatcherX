@@ -20,6 +20,9 @@ object Config : AutoSavePluginConfig("SteamWatcherXConfig") {
     @ValueDescription("是否开启成就解锁通知")
     val notifyAchievement: Boolean by value(true)
 
+    @ValueDescription("是否仅推送全球解锁率低于 10% 的稀有成就，仍受 notifyAchievement 控制")
+    val notifyRareAchievementOnly: Boolean by value(false)
+
     @ValueDescription("是否启用翻译功能 (请求中文名称)")
     val enableTranslation: Boolean by value(true)
 

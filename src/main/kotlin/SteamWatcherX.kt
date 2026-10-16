@@ -102,11 +102,12 @@ object SteamWatcherX : KotlinPlugin(
     }
 
     private suspend fun checkUpdates() {
-        if (Subscribers.bindings.isEmpty()) return
-        logDebug("开始检查 ${Subscribers.bindings.size} 个总绑定...")
+        val bindings = Subscribers.registry.snapshot()
+        if (bindings.isEmpty()) return
+        logDebug("开始检查 ${bindings.size} 个总绑定...")
 
-        val groupedBindings = Subscribers.bindings.groupBy { it.steamId }
-        logDebug("将 ${Subscribers.bindings.size} 个绑定分成了 ${groupedBindings.size} 个独立 Steam 用户进行检查。")
+        val groupedBindings = bindings.groupBy { it.steamId }
+        logDebug("将 ${bindings.size} 个绑定分成了 ${groupedBindings.size} 个独立 Steam 用户进行检查。")
 
         groupedBindings.forEach { (steamId, userBindings) ->
             // steamId 对应的所有绑定列表
@@ -227,35 +228,40 @@ object SteamWatcherX : KotlinPlugin(
                     }
 
                     logInfo("检测到新成就：steamId=$steamId，数量=${newAchievements.size}")
+                    if (!Config.notifyAchievement) {
+                        currentState.lastUnlockTime = sortedNew.maxOf { it.unlocktime }
+                        return
+                    }
                     val schema = SteamApi.getSchemaForGame(appId)
-                    val globalPercentages = SteamApi.getGlobalAchievementPercentages(appId)?.associateBy { it.name }
+                    val globalPercentages = SteamApi.getGlobalAchievementPercentages(appId)?.associate { it.name to it.percent }
 
                     if (schema?.game == null) {
                         logWarn("获取游戏 Schema 失败，无法发送成就通知")
                         return
                     }
 
-                    for (ach in sortedNew) {
-                        val schemaAch = schema.game.availableGameStats?.achievements?.find { it.name == ach.apiname }
-                        if (schemaAch != null) {
-                            val info = ImageRenderer.AchievementInfo(
-                                name = schemaAch.displayName,
-                                description = schemaAch.description,
-                                iconUrl = schemaAch.icon,
-                                globalUnlockPercentage = globalPercentages?.get(ach.apiname)?.percent ?: 0.0
-                            )
-                            bindings.forEach { binding ->
-                                sendUpdate(binding.groupId, summary, info, displayGameName)
-                            }
-                            delay(1000)
-                        }
+                    val batch = AchievementNotifications.prepare(
+                        sortedNew, schema.game.availableGameStats?.achievements.orEmpty(),
+                        globalPercentages, Config.notifyRareAchievementOnly
+                    )
+                    if (batch == null) {
+                        logWarn("全球解锁率不完整，暂缓 $steamId 的成就通知，下次检查重试")
+                        return
                     }
-                    currentState.lastUnlockTime = sortedNew.maxOf { it.unlocktime }
+                    for (info in batch.notifications) {
+                        bindings.forEach { binding ->
+                            sendUpdate(binding.groupId, summary, info, displayGameName)
+                        }
+                        delay(1000)
+                    }
+                    currentState.lastUnlockTime = batch.lastUnlockTime
                 }
             } else {
                 currentState.lastGameId = null
                 currentState.lastUnlockTime = 0L
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logError("获取 Steam 状态失败: steamId=$steamId", e)
         }
@@ -274,7 +280,7 @@ object SteamWatcherX : KotlinPlugin(
         //通知
         val shouldNotify = if (achievement != null) {
             //检查成就通知开关
-            Config.notifyAchievement
+            Config.notifyAchievement && (!Config.notifyRareAchievementOnly || isRareAchievement(achievement.globalUnlockPercentage))
         } else {
             // 2. 如果没有成就信息（是普通状态更新），则检查游戏/在线开关
             when {
@@ -289,7 +295,8 @@ object SteamWatcherX : KotlinPlugin(
         try {
             // 将包含翻译名称的 summary 传递给渲染器
             logDebug("sendUpdate: 正在渲染图片...")
-            val finalSummary = summary.copy(gameextrainfo = displayGameName)
+            val playerName = Subscribers.registry.displayName(groupId, summary.steamid, summary.personaname)
+            val finalSummary = summary.copy(personaname = playerName, gameextrainfo = displayGameName)
             val imageBytes = ImageRenderer.render(finalSummary, achievement)
 
             val bot = Bot.instances.firstOrNull() ?: return
@@ -301,10 +308,10 @@ object SteamWatcherX : KotlinPlugin(
 
                 // 生成文本
                 val text = when {
-                    achievement != null -> "${summary.personaname} 在 ${displayGameName ?: "游戏"} 中解锁了成就 ${achievement.name}"
-                    isPlaying -> "${summary.personaname} 正在玩 $displayGameName"
-                    isOnline -> "${summary.personaname} 当前状态 在线"
-                    else -> "${summary.personaname} 当前状态 离线"
+                    achievement != null -> "$playerName 在 ${displayGameName ?: "游戏"} 中解锁了成就 ${achievement.name}"
+                    isPlaying -> "$playerName 正在玩 $displayGameName"
+                    isOnline -> "$playerName 当前状态 在线"
+                    else -> "$playerName 当前状态 离线"
                 }
 
                 val message = MessageChainBuilder().append(text).append("\n").append(img).build()
@@ -313,6 +320,8 @@ object SteamWatcherX : KotlinPlugin(
             } finally {
                 withContext(Dispatchers.IO) { resource.close() }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logError("发送更新失败 (group=$groupId, steam=${summary.steamid}) -> ${e.message}")
         }

@@ -10,7 +10,8 @@ object Subscribers : AutoSavePluginData("Subscribers") {
     data class Subscription(
         val groupId: Long,
         val qqId: Long,
-        val steamId: String
+        val steamId: String,
+        val remark: String = ""
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -27,5 +28,7 @@ object Subscribers : AutoSavePluginData("Subscribers") {
     }
 
     @ValueDescription("已绑定的Steam订阅列表")
-    val bindings: MutableSet<Subscription> by value(mutableSetOf())
+    private val bindings: MutableSet<Subscription> by value(mutableSetOf())
+
+    internal val registry by lazy { SubscriptionRegistry(bindings) }
 }

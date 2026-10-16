@@ -19,7 +19,7 @@ object ImageRenderer {
             val stream: InputStream? = javaClass.getResourceAsStream(fontFileName)
             if (stream != null) {
                 // 加载字体文件
-                font = Font.createFont(Font.TRUETYPE_FONT, stream)
+                font = stream.use { Font.createFont(Font.TRUETYPE_FONT, it) }
                 // 注册到图形环境（某些系统需要）
                 val ge = GraphicsEnvironment.getLocalGraphicsEnvironment()
                 ge.registerFont(font)
@@ -66,7 +66,7 @@ object ImageRenderer {
 
     fun render(summary: SteamApi.PlayerSummary, achievement: AchievementInfo? = null): ByteArray {
         return if (achievement != null) {
-            renderAchievementUnlock(summary, achievement)
+            renderAchievementUnlock(achievement)
         } else {
             renderPlayerSummary(summary)
         }
@@ -126,7 +126,7 @@ object ImageRenderer {
 
         g.color = playerNameColor
         g.font = FONT_YAHEI_BOLD_14
-        g.drawString(summary.personaname, textX, 32)
+        g.drawString(ellipsize(summary.personaname, g.fontMetrics, width - textX - 15), textX, 32)
 
 
         if (gameName != null) {
@@ -138,7 +138,7 @@ object ImageRenderer {
             // 游戏名称的字体设置
             g.font = FONT_YAHEI_PLAIN_13
             g.color = gameNameColor!!
-            g.drawString(gameName, textX, 70)
+            g.drawString(ellipsize(gameName, g.fontMetrics, width - textX - 15), textX, 70)
         } else {
             // “在线”或“离线”的字体设置
             g.font = FONT_YAHEI_PLAIN_14
@@ -150,7 +150,7 @@ object ImageRenderer {
         return toByteArray(image)
     }
 
-    private fun renderAchievementUnlock(summary: SteamApi.PlayerSummary, achievement: AchievementInfo): ByteArray {
+    private fun renderAchievementUnlock(achievement: AchievementInfo): ByteArray {
         val width = 300
         val height = 90
         val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
@@ -158,7 +158,7 @@ object ImageRenderer {
         setupGraphics(g)
 
         // 判断成就是否为稀有 (<10%)
-        val isRare = achievement.globalUnlockPercentage < 10.0
+        val isRare = isRareAchievement(achievement.globalUnlockPercentage)
 
         // 绘制背景
         drawBackground(g, width, height)
@@ -181,7 +181,7 @@ object ImageRenderer {
         // 成就名称
         g.color = Color.WHITE
         g.font = FONT_YAHEI_BOLD_14
-        g.drawString(achievement.name, textX, 30)
+        g.drawString(ellipsize(achievement.name, g.fontMetrics, width - textX - 15), textX, 30)
 
         // 文字 "已解锁成就"
         g.color = NORMAL_GREY
@@ -191,7 +191,8 @@ object ImageRenderer {
         // 全球解锁率
         g.color = if (isRare) RARE_ACHIEVEMENT_COLOR else Color(100, 100, 100)
         g.font = FONT_YAHEI_PLAIN_10
-        val percentageText = "全球解锁率: ${String.format("%.1f", achievement.globalUnlockPercentage)}%"
+        val percentageText = achievement.globalUnlockPercentage?.let { "全球解锁率: ${String.format("%.1f", it)}%" }
+            ?: "全球解锁率: 未知"
         g.drawString(percentageText, textX, 70)
 
         g.dispose()
@@ -211,6 +212,21 @@ object ImageRenderer {
             g.fillRect(iconX, iconY, iconSize, iconSize)
             g.color = Color(65, 72, 80)
             g.drawRect(iconX, iconY, iconSize - 1, iconSize - 1)
+            // A recognizable trophy makes a failed download distinct from an empty icon.
+            val placeholder = g.create() as Graphics2D
+            try {
+                placeholder.translate(iconX, iconY)
+                placeholder.scale(iconSize / 56.0, iconSize / 56.0)
+                placeholder.color = Color(155, 167, 179)
+                placeholder.stroke = BasicStroke(2.5f)
+                placeholder.drawArc(10, 14, 16, 16, 90, 180)
+                placeholder.drawArc(30, 14, 16, 16, 270, 180)
+                placeholder.fillRoundRect(18, 13, 20, 18, 4, 4)
+                placeholder.fillRect(26, 30, 4, 11)
+                placeholder.fillRoundRect(19, 41, 18, 4, 2, 2)
+            } finally {
+                placeholder.dispose()
+            }
         }
     }
 
@@ -260,7 +276,7 @@ object ImageRenderer {
         val bgStream = javaClass.getResourceAsStream("/background.png")
         if (bgStream != null) {
             try {
-                val bgImage = ImageIO.read(bgStream)
+                val bgImage = bgStream.use { ImageIO.read(it) }
                 val scaledBg = bgImage.getScaledInstance(width, height, Image.SCALE_SMOOTH)
                 g.drawImage(scaledBg, 0, 0, null)
                 return
@@ -298,7 +314,7 @@ object ImageRenderer {
         val name: String,
         val description: String?,
         val iconUrl: String,
-        val globalUnlockPercentage: Double,
+        val globalUnlockPercentage: Double?,
         val iconImage: BufferedImage? = null
     )
 
