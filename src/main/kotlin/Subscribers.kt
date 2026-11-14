@@ -3,7 +3,9 @@ package com.bcz
 import net.mamoe.mirai.console.data.AutoSavePluginData
 import net.mamoe.mirai.console.data.ValueDescription
 import net.mamoe.mirai.console.data.value
+import net.mamoe.mirai.console.plugin.jvm.savePluginData
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 object Subscribers : AutoSavePluginData("Subscribers") {
     @Serializable
@@ -13,6 +15,16 @@ object Subscribers : AutoSavePluginData("Subscribers") {
         val steamId: String,
         val remark: String = ""
     ) {
+        @Transient
+        internal var bindingId: Any = Any()
+            private set
+
+        internal fun withRemark(remark: String): Subscription =
+            copy(remark = remark.trim()).also { it.bindingId = bindingId }
+
+        internal fun displayName(steamName: String): String =
+            if (remark.isBlank()) steamName else "$remark（$steamName）"
+
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is Subscription) return false
@@ -30,5 +42,7 @@ object Subscribers : AutoSavePluginData("Subscribers") {
     @ValueDescription("已绑定的Steam订阅列表")
     private val bindings: MutableSet<Subscription> by value(mutableSetOf())
 
-    internal val registry by lazy { SubscriptionRegistry(bindings) }
+    internal val registry by lazy {
+        SubscriptionRegistry(bindings) { SteamWatcherX.savePluginData(this) }
+    }
 }

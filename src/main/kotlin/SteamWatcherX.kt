@@ -24,6 +24,7 @@ object SteamWatcherX : KotlinPlugin(
 ) {
 
     internal val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    internal val broadcastReplies = BroadcastReplyIndex()
 
     private const val GITHUB_REPO_URL = "BestBcz/SteamWatcherX"
 
@@ -135,9 +136,13 @@ object SteamWatcherX : KotlinPlugin(
         }
     }
     suspend fun checkUpdatesOnce(groupId: Long, qq: Long, steamId: String) {
-        logInfo("手动初始化检查：steamId=$steamId (qq=$qq, 群=$groupId)")
-        val singleBinding = Subscribers.Subscription(groupId, qq, steamId)
-        checkUserAndNotify(steamId, listOf(singleBinding), forceNotify = true)
+        val binding = Subscribers.registry.findCurrent(groupId, qq, steamId) ?: return
+        checkUpdatesOnce(binding)
+    }
+
+    internal suspend fun checkUpdatesOnce(binding: Subscribers.Subscription) {
+        logInfo("手动初始化检查：steamId=${binding.steamId} (qq=${binding.qqId}, 群=${binding.groupId})")
+        checkUserAndNotify(binding.steamId, listOf(binding), forceNotify = true)
     }
 
     private suspend fun checkUserAndNotify(steamId: String, bindings: List<Subscribers.Subscription>, forceNotify: Boolean = false) {
@@ -177,7 +182,7 @@ object SteamWatcherX : KotlinPlugin(
 
                 if (forceNotify) {
                     bindings.forEach { binding ->
-                        sendUpdate(binding.groupId, summary, displayGameName = displayGameName)
+                        sendUpdate(binding, summary, displayGameName = displayGameName)
                     }
                 } else {
                     logInfo("记录初始状态：steamId=$steamId (基准时间=$initialUnlockTime)，不发送通知")
@@ -195,7 +200,7 @@ object SteamWatcherX : KotlinPlugin(
                 currentState.gameid = newState.gameid
 
                 bindings.forEach { binding ->
-                    sendUpdate(binding.groupId, summary, displayGameName = displayGameName)
+                    sendUpdate(binding, summary, displayGameName = displayGameName)
                 }
             }
 
@@ -250,7 +255,7 @@ object SteamWatcherX : KotlinPlugin(
                     }
                     for (info in batch.notifications) {
                         bindings.forEach { binding ->
-                            sendUpdate(binding.groupId, summary, info, displayGameName)
+                            sendUpdate(binding, summary, info, displayGameName)
                         }
                         delay(1000)
                     }
@@ -268,7 +273,7 @@ object SteamWatcherX : KotlinPlugin(
     }
 
     private suspend fun sendUpdate(
-        groupId: Long,
+        binding: Subscribers.Subscription,
         summary: SteamApi.PlayerSummary,
         achievement: ImageRenderer.AchievementInfo? = null,
         displayGameName: String? = null
@@ -291,11 +296,13 @@ object SteamWatcherX : KotlinPlugin(
             }
         }
         if (!shouldNotify) return
+        val groupId = binding.groupId
 
         try {
             // 将包含翻译名称的 summary 传递给渲染器
             logDebug("sendUpdate: 正在渲染图片...")
-            val playerName = Subscribers.registry.displayName(groupId, summary.steamid, summary.personaname)
+            val currentBinding = Subscribers.registry.findCurrent(binding) ?: return
+            val playerName = currentBinding.displayName(summary.personaname)
             val finalSummary = summary.copy(personaname = playerName, gameextrainfo = displayGameName)
             val imageBytes = ImageRenderer.render(finalSummary, achievement)
 
@@ -315,7 +322,11 @@ object SteamWatcherX : KotlinPlugin(
                 }
 
                 val message = MessageChainBuilder().append(text).append("\n").append(img).build()
-                group.sendMessage(message)
+                if (Subscribers.registry.findCurrent(binding) == null) return
+                val receipt = group.sendMessage(message)
+                if (!broadcastReplies.remember(receipt.source, binding)) {
+                    logDebug("群 $groupId 的播报缺少可用的消息序号，无法通过引用操作订阅")
+                }
 
             } finally {
                 withContext(Dispatchers.IO) { resource.close() }
@@ -329,6 +340,7 @@ object SteamWatcherX : KotlinPlugin(
 
     override fun onDisable() {
         scope.cancel()
+        broadcastReplies.clear()
         Subscribers.save()
         logger.info("SteamWatcherX 已关闭")
     }

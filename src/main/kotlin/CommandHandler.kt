@@ -1,10 +1,13 @@
 package com.bcz
 
-import net.mamoe.mirai.console.plugin.jvm.savePluginData
 import net.mamoe.mirai.event.events.GroupMessageEvent
 import net.mamoe.mirai.message.data.content
+import net.mamoe.mirai.message.data.QuoteReply
 import kotlinx.coroutines.launch
 import net.mamoe.mirai.contact.MemberPermission
+
+internal fun canManageSubscriptions(permission: MemberPermission): Boolean =
+    permission == MemberPermission.OWNER || permission == MemberPermission.ADMINISTRATOR
 
 object CommandHandler {
 
@@ -16,6 +19,14 @@ object CommandHandler {
     }
 
     suspend fun handle(event: GroupMessageEvent) {
+        val quote = event.message[QuoteReply]
+        if (quote != null) {
+            val reply = SubscriptionReply.parse(event.message, event.bot.id)
+            if (reply != null) {
+                handleReply(event, quote, reply)
+                return
+            }
+        }
         val parts = parse(event.message.content) ?: return
         val sender = event.sender.id
         val groupId = event.group.id
@@ -35,6 +46,10 @@ object CommandHandler {
                 /sw remark <SteamID> [备注] - 设置本群备注 (不填备注则清除，绑定者或群管理可修改)
                 /sw list - 查看本群所有绑定
                 /sw help - 显示此帮助信息
+
+                引用本次运行期间在本群发出的 Steam 播报，可直接回复：
+                备注 123 / 清除备注 / 取消订阅 / 查看订阅
+                查看订阅对所有群成员开放，改备注和取消订阅限绑定者、群主或管理员。重启后请引用新播报。
                 """.trimIndent() // 使用 trimIndent() 保持格式美观
                 event.group.sendMessage(helpMsg)
             }
@@ -48,11 +63,11 @@ object CommandHandler {
 
                 val steamId = steamIdRegex.find(inputText)?.value
                 if (steamId != null) {
-                    if (Subscribers.registry.bind(groupId, sender, steamId)) {
-                        SteamWatcherX.savePluginData(Subscribers)
+                    val binding = Subscribers.registry.bindAndGet(groupId, sender, steamId)
+                    if (binding != null) {
                         event.group.sendMessage("✅ 绑定成功！QQ: $sender → 群: $groupId → SteamID: $steamId")
                         SteamWatcherX.scope.launch {
-                            SteamWatcherX.checkUpdatesOnce(groupId, sender, steamId)
+                            SteamWatcherX.checkUpdatesOnce(binding)
                         }
                     } else {
                         event.group.sendMessage("⚠️ 此 SteamID 已在本群被绑定，无需重复绑定")
@@ -72,7 +87,6 @@ object CommandHandler {
                     if (steamId != null) {
                         // 依然验证QQ号，确保是本人解绑
                         removed = Subscribers.registry.unbind(groupId, sender, steamId)
-                        if (removed) SteamWatcherX.savePluginData(Subscribers)
                         if (removed) event.group.sendMessage("✅ 已解除绑定 (SteamID=$steamId)") else event.group.sendMessage("⚠️ 未找到您绑定的该 SteamID")
                     } else {
                         event.group.sendMessage("⚠️ 未在您的输入中找到有效的数字 SteamID")
@@ -80,7 +94,6 @@ object CommandHandler {
                 } else {
                     // 解绑该用户在本群的所有ID
                     removed = Subscribers.registry.unbind(groupId, sender)
-                    if (removed) SteamWatcherX.savePluginData(Subscribers)
                     if (removed) event.group.sendMessage("✅ 已解除您在本群的所有绑定") else event.group.sendMessage("⚠️ 未找到您的任何绑定")
                 }
             }
@@ -93,13 +106,9 @@ object CommandHandler {
                 }
                 val remark = parts.getOrNull(3).orEmpty().trim()
                 when (Subscribers.registry.setRemark(
-                    groupId, steamId, sender, event.sender.permission != MemberPermission.MEMBER, remark
+                    groupId, steamId, sender, canManageSubscriptions(event.sender.permission), remark
                 )) {
-                    SubscriptionRegistry.RemarkResult.UPDATED -> {
-                        SteamWatcherX.savePluginData(Subscribers)
-                        event.group.sendMessage(if (remark.isEmpty()) "✅ 已清除本群备注 (SteamID=$steamId)"
-                            else "✅ 已设置本群备注: $remark (SteamID=$steamId)")
-                    }
+                    SubscriptionRegistry.RemarkResult.UPDATED -> event.group.sendMessage(remarkConfirmation(steamId, remark))
                     SubscriptionRegistry.RemarkResult.NOT_FOUND -> event.group.sendMessage("⚠️ 此 SteamID 未在本群绑定")
                     SubscriptionRegistry.RemarkResult.FORBIDDEN -> event.group.sendMessage("❌ 只有绑定者、群主或管理员可以修改备注")
                 }
@@ -111,10 +120,7 @@ object CommandHandler {
                 if (groupBindings.isEmpty()) {
                     event.group.sendMessage("📭 本群暂无绑定")
                 } else {
-                    val listStr = groupBindings.joinToString("\n") { sub ->
-                        "绑定人QQ: ${sub.qqId} → SteamID: ${sub.steamId}" +
-                            if (sub.remark.isBlank()) "" else " → 备注: ${sub.remark}"
-                    }
+                    val listStr = groupBindings.joinToString("\n") { formatBinding(it) }
                     event.group.sendMessage("📌 本群已绑定:\n$listStr")
                 }
             }
@@ -124,5 +130,39 @@ object CommandHandler {
                 event.group.sendMessage("❓ 未知指令。请输入 /sw help 查看可用指令。")
             }
         }
+    }
+
+    private suspend fun handleReply(event: GroupMessageEvent, quote: QuoteReply, command: SubscriptionReply) {
+        val binding = SteamWatcherX.broadcastReplies.resolve(quote.source, event.bot.id, event.group.id)
+        if (binding == null) {
+            event.group.sendMessage("⚠️ 无法识别这条播报，请引用本群新发出的 Steam 播报")
+            return
+        }
+
+        val message = when (val result = Subscribers.registry.applyReply(
+            binding, event.sender.id, canManageSubscriptions(event.sender.permission), command
+        )) {
+            SubscriptionRegistry.ReplyResult.NotFound -> "⚠️ 这条播报对应的订阅已失效，请引用新播报"
+            SubscriptionRegistry.ReplyResult.Forbidden -> "❌ 只有绑定者、群主或管理员可以改备注或取消订阅"
+            is SubscriptionRegistry.ReplyResult.Success -> {
+                val current = result.subscription
+                when (command) {
+                    is SubscriptionReply.Remark -> remarkConfirmation(current.steamId, current.remark)
+                    SubscriptionReply.Cancel -> "✅ 已取消本群订阅 (SteamID=${current.steamId})"
+                    SubscriptionReply.View -> "📌 本群订阅\n${formatBinding(current, showEmptyRemark = true)}"
+                }
+            }
+        }
+        event.group.sendMessage(message)
+    }
+
+    private fun remarkConfirmation(steamId: String, remark: String): String =
+        if (remark.isEmpty()) "✅ 已清除本群备注 (SteamID=$steamId)"
+        else "✅ 已设置本群备注: $remark (SteamID=$steamId)"
+
+    private fun formatBinding(binding: Subscribers.Subscription, showEmptyRemark: Boolean = false): String {
+        val details = "绑定人QQ: ${binding.qqId} → SteamID: ${binding.steamId}"
+        if (!showEmptyRemark && binding.remark.isBlank()) return details
+        return "$details → 备注: ${binding.remark.ifBlank { "未设置" }}"
     }
 }
